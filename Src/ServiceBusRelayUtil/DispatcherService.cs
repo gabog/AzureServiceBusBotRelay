@@ -11,6 +11,8 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
 using Microsoft.ServiceBus.Web;
+using Newtonsoft.Json;
+using Formatting = Newtonsoft.Json.Formatting;
 
 namespace GaboG.ServiceBusRelayUtil
 {
@@ -48,13 +50,14 @@ namespace GaboG.ServiceBusRelayUtil
                 var ti0 = DateTime.Now;
                 Console.WriteLine("In GetAsync:");
                 var context = WebOperationContext.Current;
-                var request = MakeHttpRequestMessageFrom(context.IncomingRequest, null, _config.BufferRequestContent);
-                HttpResponseMessage response;
+                var request = BuildForwardedRequest(context, null);
                 Console.WriteLine("...calling {0}...", request.RequestUri);
+                HttpResponseMessage response;
                 using (var client = new HttpClient())
                 {
                     response = await client.SendAsync(request, CancellationToken.None);
                 }
+
                 Console.WriteLine("...and back {0:N0} ms...", DateTime.Now.Subtract(ti0).TotalMilliseconds);
                 Console.WriteLine("");
 
@@ -68,8 +71,7 @@ namespace GaboG.ServiceBusRelayUtil
             }
             catch (Exception ex)
             {
-                Console.WriteLine(ex);
-                Console.WriteLine("");
+                WriteException(ex);
                 throw;
             }
         }
@@ -81,14 +83,54 @@ namespace GaboG.ServiceBusRelayUtil
             try
             {
                 var ti0 = DateTime.Now;
-                Console.WriteLine("In InvokleAsync:");
+                WriteFlowerLine();
+                Console.WriteLine("In InvokeAsync:");
                 var context = WebOperationContext.Current;
-                Stream s = null;
+                var request = BuildForwardedRequest(context, msg);
+                Console.WriteLine("...calling {0}", request.RequestUri);
+                HttpResponseMessage response;
+                using (var client = new HttpClient())
+                {
+                    response = await client.SendAsync(request, CancellationToken.None);
+                }
+
+                Console.WriteLine("...and done {0:N0} ms...", DateTime.Now.Subtract(ti0).TotalMilliseconds);
+
+                Console.WriteLine("...reading and creating response...");
+                CopyHttpResponseMessageToOutgoingResponse(response, context.OutgoingResponse);
+                var stream = response.Content != null ? await response.Content.ReadAsStreamAsync() : null;
+                var message = StreamMessageHelper.CreateMessage(MessageVersion.None, "GETRESPONSE", stream ?? new MemoryStream());
+                Console.WriteLine("...and done (total time: {0:N0} ms).", DateTime.Now.Subtract(ti0).TotalMilliseconds);
+                return message;
+            }
+            catch (Exception ex)
+            {
+                WriteException(ex);
+                throw;
+            }
+        }
+
+        private HttpRequestMessage BuildForwardedRequest(WebOperationContext context, Message msg)
+        {
+            var incomingRequest = context.IncomingRequest;
+
+            var mappedUri = new Uri(incomingRequest.UriTemplateMatch.RequestUri.ToString().Replace(_config.SBAddress.ToString(), _config.TargetAddress.ToString()));
+            var newRequest = new HttpRequestMessage(new HttpMethod(incomingRequest.Method), mappedUri);
+
+            // Copy headers
+            foreach (var name in incomingRequest.Headers.AllKeys.Where(name => !_httpContentHeaders.Contains(name)))
+            {
+                newRequest.Headers.TryAddWithoutValidation(name, name == "Host" ? _config.TargetAddress.Host : incomingRequest.Headers.Get(name));
+            }
+
+            if (msg != null)
+            {
+                Stream messageStream = null;
                 if (msg.Properties.TryGetValue("WebBodyFormatMessageProperty", out var value))
                 {
                     if (value is WebBodyFormatMessageProperty prop && (prop.Format == WebContentFormat.Json || prop.Format == WebContentFormat.Raw))
                     {
-                        s = StreamMessageHelper.GetStream(msg);
+                        messageStream = StreamMessageHelper.GetStream(msg);
                     }
                 }
                 else
@@ -98,69 +140,74 @@ namespace GaboG.ServiceBusRelayUtil
                     {
                         msg.WriteBodyContents(xw);
                     }
-                    ms.Seek(0, SeekOrigin.Begin);
-                    s = ms;
-                }
-                var request = MakeHttpRequestMessageFrom(context.IncomingRequest, s, _config.BufferRequestContent);
-                HttpResponseMessage response;
-                Console.WriteLine("...calling {0}", request.RequestUri);
-                using (var client = new HttpClient())
-                {
-                    response = await client.SendAsync(request, CancellationToken.None);
-                }
-                Console.WriteLine("...and back {0:N0} ms...", DateTime.Now.Subtract(ti0).TotalMilliseconds);
 
-                Console.WriteLine("...reading and creating response...");
-                CopyHttpResponseMessageToOutgoingResponse(response, context.OutgoingResponse);
-                var stream = response.Content != null ? await response.Content.ReadAsStreamAsync() : null;
-                var message = StreamMessageHelper.CreateMessage(MessageVersion.None, "GETRESPONSE", stream ?? new MemoryStream());
-                Console.WriteLine("...and done (total time: {0:N0} ms).", DateTime.Now.Subtract(ti0).TotalMilliseconds);
-                Console.WriteLine("");
-                return message;
+                    ms.Seek(0, SeekOrigin.Begin);
+                    messageStream = ms;
+                }
+
+                if (messageStream != null)
+                {
+                    if (_config.BufferRequestContent)
+                    {
+                        var ms1 = new MemoryStream();
+                        messageStream.CopyTo(ms1);
+                        ms1.Seek(0, SeekOrigin.Begin);
+                        newRequest.Content = new StreamContent(ms1);
+                    }
+                    else
+                    {
+                        var ms1 = new MemoryStream();
+                        messageStream.CopyTo(ms1);
+                        ms1.Seek(0, SeekOrigin.Begin);
+
+                        var debugMs = new MemoryStream();
+                        ms1.CopyTo(debugMs);
+                        debugMs.Seek(0, SeekOrigin.Begin);
+
+                        var result = Encoding.UTF8.GetString(debugMs.ToArray());
+                        WriteJsonObject(result);
+
+                        ms1.Seek(0, SeekOrigin.Begin);
+                        newRequest.Content = new StreamContent(ms1);
+                    }
+
+                    foreach (var name in incomingRequest.Headers.AllKeys.Where(name => _httpContentHeaders.Contains(name)))
+                    {
+                        newRequest.Content.Headers.TryAddWithoutValidation(name, incomingRequest.Headers.Get(name));
+                    }
+                }
             }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex);
-                Console.WriteLine("");
-                throw;
-            }
+
+            return newRequest;
         }
 
-        private HttpRequestMessage MakeHttpRequestMessageFrom(IncomingWebRequestContext oreq, Stream body, bool bufferBody)
+        private static void WriteException(Exception ex)
         {
-            var mappedUri = new Uri(oreq.UriTemplateMatch.RequestUri.ToString().Replace(_config.SBAddress.ToString(), _config.TargetAddress.ToString()));
-            var nreq = new HttpRequestMessage(new HttpMethod(oreq.Method), mappedUri);
-            foreach (var name in oreq.Headers.AllKeys.Where(name => !_httpContentHeaders.Contains(name)))
-            {
-                if (name == "Host")
-                {
-                    nreq.Headers.TryAddWithoutValidation(name, _config.TargetAddress.Host);
-                }
-                else
-                {
-                    nreq.Headers.TryAddWithoutValidation(name, oreq.Headers.Get(name));
-                }
-            }
-            if (body != null)
-            {
-                if (bufferBody)
-                {
-                    var ms = new MemoryStream();
-                    body.CopyTo(ms);
-                    ms.Seek(0, SeekOrigin.Begin);
-                    nreq.Content = new StreamContent(ms);
-                }
-                else
-                {
-                    nreq.Content = new StreamContent(body);
-                }
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine(ex);
+            Console.WriteLine("");
+            Console.ResetColor();
+        }
 
-                foreach (var name in oreq.Headers.AllKeys.Where(name => _httpContentHeaders.Contains(name)))
-                {
-                    nreq.Content.Headers.TryAddWithoutValidation(name, oreq.Headers.Get(name));
-                }
-            }
-            return nreq;
+        private static void WriteJsonObject(string result)
+        {
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            var s = new JsonSerializerSettings
+            {
+                Formatting = Formatting.Indented
+            };
+
+            dynamic o = JsonConvert.DeserializeObject(result);
+            var formatted = JsonConvert.SerializeObject(o, s);
+            Console.WriteLine(formatted);
+            Console.ResetColor();
+        }
+
+        private static void WriteFlowerLine()
+        {
+            Console.ForegroundColor = ConsoleColor.Green;
+            Console.WriteLine("\r\n=> {0:MM/dd/yyyy hh:mm:ss.fff tt} {1}", DateTime.Now, new string('*', 80));
+            Console.ResetColor();
         }
 
         private static void CopyHttpResponseMessageToOutgoingResponse(HttpResponseMessage response, OutgoingWebResponseContext outgoingResponse)
@@ -171,6 +218,7 @@ namespace GaboG.ServiceBusRelayUtil
             {
                 outgoingResponse.SuppressEntityBody = true;
             }
+
             foreach (var kvp in response.Headers)
             {
                 foreach (var value in kvp.Value)
@@ -178,6 +226,7 @@ namespace GaboG.ServiceBusRelayUtil
                     outgoingResponse.Headers.Add(kvp.Key, value);
                 }
             }
+
             if (response.Content != null)
             {
                 foreach (var kvp in response.Content.Headers)
