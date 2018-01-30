@@ -118,9 +118,10 @@ namespace GaboG.ServiceBusRelayUtil
             var newRequest = new HttpRequestMessage(new HttpMethod(incomingRequest.Method), mappedUri);
 
             // Copy headers
+            var hostHeader = _config.TargetAddress.Host + (_config.TargetAddress.Port != 80 || _config.TargetAddress.Port != 443 ? ":" + _config.TargetAddress.Port : "");
             foreach (var name in incomingRequest.Headers.AllKeys.Where(name => !_httpContentHeaders.Contains(name)))
             {
-                newRequest.Headers.TryAddWithoutValidation(name, name == "Host" ? _config.TargetAddress.Host : incomingRequest.Headers.Get(name));
+                newRequest.Headers.TryAddWithoutValidation(name, name == "Host" ? hostHeader : incomingRequest.Headers.Get(name));
             }
 
             if (msg != null)
