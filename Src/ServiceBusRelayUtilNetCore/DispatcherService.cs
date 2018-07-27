@@ -2,11 +2,9 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
-using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using GaboG.ServiceBusRelayUtilNetCore.Extensions;
@@ -61,13 +59,12 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             return _listener.CloseAsync(cancelToken);
         }
 
-        async void ListenerRequestHandler(RelayedHttpListenerContext context)
+        private async void ListenerRequestHandler(RelayedHttpListenerContext context)
         {
             var startTimeUtc = DateTime.UtcNow;
-            Console.WriteLine("In ListenerRequestHandler:");
             try
             {
-                Console.WriteLine("...calling {0}...", _targetServiceAddress);
+                Console.WriteLine("Calling {0}...", _targetServiceAddress);
                 var requestMessage = CreateHttpRequestMessage(context);
                 var responseMessage = await _httpClient.SendAsync(requestMessage);
                 await SendResponseAsync(context, responseMessage);
@@ -81,11 +78,11 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             }
             finally
             {
-                LogRequest(startTimeUtc, context);
+                LogRequest(startTimeUtc);
             }
         }
 
-        async Task SendResponseAsync(RelayedHttpListenerContext context, HttpResponseMessage responseMessage)
+        private async Task SendResponseAsync(RelayedHttpListenerContext context, HttpResponseMessage responseMessage)
         {
             context.Response.StatusCode = responseMessage.StatusCode;
             context.Response.StatusDescription = responseMessage.ReasonPhrase;
@@ -103,17 +100,14 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             await responseStream.CopyToAsync(context.Response.OutputStream);
         }
 
-        void SendErrorResponse(Exception e, RelayedHttpListenerContext context)
+        private void SendErrorResponse(Exception ex, RelayedHttpListenerContext context)
         {
             context.Response.StatusCode = HttpStatusCode.InternalServerError;
-
-#if DEBUG || INCLUDE_ERROR_DETAILS
-            context.Response.StatusDescription = $"Internal Server Error: {e.GetType().FullName}: {e.Message}";
-#endif
+            context.Response.StatusDescription = $"Internal Server Error: {ex.GetType().FullName}: {ex.Message}";
             context.Response.Close();
         }
 
-        HttpRequestMessage CreateHttpRequestMessage(RelayedHttpListenerContext context)
+        private HttpRequestMessage CreateHttpRequestMessage(RelayedHttpListenerContext context)
         {
             var requestMessage = new HttpRequestMessage();
             if (context.Request.HasEntityBody)
@@ -148,7 +142,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             return requestMessage;
         }
 
-        void LogRequest(DateTime startTimeUtc, RelayedHttpListenerContext context)
+        private void LogRequest(DateTime startTimeUtc)
         {
             var stopTimeUtc = DateTime.UtcNow;
             //var buffer = new StringBuilder();
