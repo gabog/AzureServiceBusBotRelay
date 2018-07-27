@@ -111,10 +111,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
 
         HttpRequestMessage CreateHttpRequestMessage(RelayedHttpListenerContext context)
         {
-            var incomingRequest = context.Request;
-            var mappedUri = new Uri(incomingRequest.Url.ToString().Replace($"sb://{_relayNamespace}/{_connectionName}", _targetServiceAddress.ToString()));
-
-            var requestMessage = new HttpRequestMessage(new HttpMethod(incomingRequest.HttpMethod), mappedUri);
+            var requestMessage = new HttpRequestMessage();
             if (context.Request.HasEntityBody)
             {
                 requestMessage.Content = new StreamContent(context.Request.InputStream);
