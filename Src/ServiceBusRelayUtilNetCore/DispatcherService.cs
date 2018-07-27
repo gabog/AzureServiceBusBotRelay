@@ -11,6 +11,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using GaboG.ServiceBusRelayUtilNetCore.Extensions;
 using Microsoft.Azure.Relay;
+using Newtonsoft.Json;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
 
@@ -50,30 +51,33 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         {
             _listener.RequestHandler = ListenerRequestHandler;
             await _listener.OpenAsync(cancelToken);
-            Console.WriteLine($"Forwarding from {_listener.Address} to {_httpClient.BaseAddress}.");
-            Console.WriteLine("utcTime, request, statusCode, durationMs");
+            Console.WriteLine("Azure Service Bus is listening on \n\r\t{0}\n\rand routing requests to \n\r\t{1}\n\r\n\r", _listener.Address, _httpClient.BaseAddress);
+            Console.WriteLine("Press [Enter] to exit");
         }
 
         public Task CloseAsync(CancellationToken cancelToken)
         {
+            _httpClient.Dispose();
             return _listener.CloseAsync(cancelToken);
         }
 
         async void ListenerRequestHandler(RelayedHttpListenerContext context)
         {
             var startTimeUtc = DateTime.UtcNow;
+            Console.WriteLine("In ListenerRequestHandler:");
             try
             {
+                Console.WriteLine("...calling {0}...", _targetServiceAddress);
                 var requestMessage = CreateHttpRequestMessage(context);
                 var responseMessage = await _httpClient.SendAsync(requestMessage);
                 await SendResponseAsync(context, responseMessage);
                 await context.Response.CloseAsync();
             }
 
-            catch (Exception e)
+            catch (Exception ex)
             {
-                Console.WriteLine($"Error: {e.GetType().Name}: {e.Message}");
-                SendErrorResponse(e, context);
+                LogException(ex);
+                SendErrorResponse(ex, context);
             }
             finally
             {
@@ -139,18 +143,46 @@ namespace GaboG.ServiceBusRelayUtilNetCore
                 requestMessage.Headers.Add(headerName, context.Request.Headers[headerName]);
             }
 
+            LogRequestActivity(requestMessage);
+
             return requestMessage;
         }
 
         void LogRequest(DateTime startTimeUtc, RelayedHttpListenerContext context)
         {
             var stopTimeUtc = DateTime.UtcNow;
-            var buffer = new StringBuilder();
-            buffer.Append($"{startTimeUtc.ToString("s", CultureInfo.InvariantCulture)}, ");
-            buffer.Append($"\"{context.Request.HttpMethod} {context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped)}\", ");
-            buffer.Append($"{(int)context.Response.StatusCode}, ");
-            buffer.Append($"{(int)stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds}");
-            Console.WriteLine(buffer);
+            //var buffer = new StringBuilder();
+            //buffer.Append($"{startTimeUtc.ToString("s", CultureInfo.InvariantCulture)}, ");
+            //buffer.Append($"\"{context.Request.HttpMethod} {context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped)}\", ");
+            //buffer.Append($"{(int)context.Response.StatusCode}, ");
+            //buffer.Append($"{(int)stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds}");
+            //Console.WriteLine(buffer);
+
+            Console.WriteLine("...and back {0:N0} ms...", stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds);
+            Console.WriteLine("");
+        }
+
+        private void LogRequestActivity(HttpRequestMessage requestMessage)
+        {
+            var content = requestMessage.Content.ReadAsStringAsync().Result;
+            Console.ForegroundColor = ConsoleColor.Yellow;
+            var s = new JsonSerializerSettings
+            {
+                Formatting = Formatting.Indented
+            };
+
+            dynamic o = JsonConvert.DeserializeObject(content);
+            var formatted = JsonConvert.SerializeObject(o, s);
+            Console.WriteLine(formatted);
+            Console.ResetColor();
+        }
+
+        private static void LogException(Exception ex)
+        {
+            Console.ForegroundColor = ConsoleColor.Red;
+            Console.WriteLine(ex);
+            Console.WriteLine("");
+            Console.ResetColor();
         }
     }
 }
