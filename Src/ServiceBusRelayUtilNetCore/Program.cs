@@ -1,5 +1,7 @@
 ﻿using System;
 using System.IO;
+using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.Extensions.Configuration;
 
 // https://docs.microsoft.com/en-us/azure/service-bus-relay/service-bus-relay-rest-tutorial
@@ -28,14 +30,24 @@ namespace GaboG.ServiceBusRelayUtilNetCore
                 .AddEnvironmentVariables();
             Configuration = builder.Build();
 
+            RunAsync().GetAwaiter().GetResult();
+        }
+
+        static async Task RunAsync()
+        {
             var relayNamespace = Configuration["RelayNamespace"];
             var connectionName = Configuration["ConnectionName"];
             var keyName = Configuration["KeyName"];
             var key = Configuration["Key"];
-            var targetServiceAddress = Configuration["TargetServiceAddress"];
+            var targetServiceAddress = new Uri(Configuration["TargetServiceAddress"]);
 
-            var service = new DispatcherService(relayNamespace, connectionName, keyName, key, targetServiceAddress);
-            service.RunAsync().GetAwaiter().GetResult();
+            var hybridProxy = new DispatcherService(relayNamespace, connectionName, keyName, key, targetServiceAddress);
+
+            await hybridProxy.OpenAsync(CancellationToken.None);
+
+            Console.ReadLine();
+
+            await hybridProxy.CloseAsync(CancellationToken.None);
         }
     }
 }
