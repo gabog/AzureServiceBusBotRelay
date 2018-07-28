@@ -2,6 +2,7 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 using System;
+using System.IO;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -113,6 +114,14 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             if (context.Request.HasEntityBody)
             {
                 requestMessage.Content = new StreamContent(context.Request.InputStream);
+                // Experiment to see if I can capture the return message instad of having the bot respoding directly (so far it doesn't work).
+                //var contentStream = new MemoryStream();
+                //var writer = new StreamWriter(contentStream);
+                //var newActivity = requestMessage.Content.ReadAsStringAsync().Result.Replace("https://directline.botframework.com/", "https://localhost:44372/");
+                //writer.Write(newActivity);
+                //writer.Flush();
+                //contentStream.Position = 0;
+                //requestMessage.Content = new StreamContent(contentStream);
                 var contentType = context.Request.Headers[HttpRequestHeader.ContentType];
                 if (!string.IsNullOrEmpty(contentType))
                 {
