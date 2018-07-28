@@ -8,6 +8,8 @@ namespace GaboG.ServiceBusRelayUtil
 {
     internal class Program
     {
+        // https://github.com/pmhsfelix/WebApi.Explorations.ServiceBusRelayHost
+        // https://docs.microsoft.com/en-us/azure/service-bus-relay/service-bus-relay-rest-tutorial
         private static void Main()
         {
             var sbNamespace = ConfigurationManager.AppSettings["SBNamespace"];
