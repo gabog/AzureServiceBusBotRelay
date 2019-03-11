@@ -12,22 +12,22 @@ namespace GaboG.ServiceBusRelayUtil
         // https://docs.microsoft.com/en-us/azure/service-bus-relay/service-bus-relay-rest-tutorial
         private static void Main()
         {
-            var sbNamespace = ConfigurationManager.AppSettings["SBNamespace"];
-            var sbAddress = ServiceBusEnvironment.CreateServiceUri("https", sbNamespace, ConfigurationManager.AppSettings["SBRelayName"]);
+            var RelayNamespace = ConfigurationManager.AppSettings["RelayNamespace"];
+            var RelayAddress = ServiceBusEnvironment.CreateServiceUri("https", RelayNamespace, ConfigurationManager.AppSettings["RelayName"]);
 
             var config = new ServiceBusRelayUtilConfig
             {
-                SBAddress = sbAddress,
-                SBPolicyName = ConfigurationManager.AppSettings["SBPolicyName"],
-                SBPolicyKey = ConfigurationManager.AppSettings["SBPolicyKey"],
+                RelayAddress = RelayAddress,
+                RelayPolicyName = ConfigurationManager.AppSettings["PolicyName"],
+                RelayPolicyKey = ConfigurationManager.AppSettings["PolicyKey"],
                 MaxReceivedMessageSize = long.Parse(ConfigurationManager.AppSettings["MaxReceivedMessageSize"]),
                 TargetAddress = new Uri(ConfigurationManager.AppSettings["TargetServiceAddress"])
             };
 
-            var host = CreateWebServiceHost(config, sbAddress);
+            var host = CreateWebServiceHost(config, RelayAddress);
             host.Open();
 
-            Console.WriteLine("Azure Service Bus is listening at \n\r\t{0}\n\rrouting requests to \n\r\t{1}\n\r\n\r", sbAddress, config.TargetAddress);
+            Console.WriteLine("Azure Service Bus is listening at \n\r\t{0}\n\rrouting requests to \n\r\t{1}\n\r\n\r", RelayAddress, config.TargetAddress);
             Console.WriteLine();
             Console.WriteLine("Press [Enter] to exit");
             Console.ReadLine();
@@ -41,7 +41,7 @@ namespace GaboG.ServiceBusRelayUtil
             var host = new WebServiceHost(new DispatcherService(config));
             var binding = GetBinding(config.MaxReceivedMessageSize);
             var endpoint = host.AddServiceEndpoint(typeof(DispatcherService), binding, address);
-            var behavior = GetTransportBehavior(config.SBPolicyName, config.SBPolicyKey);
+            var behavior = GetTransportBehavior(config.RelayPolicyName, config.RelayPolicyKey);
             endpoint.Behaviors.Add(behavior);
             return host;
         }
