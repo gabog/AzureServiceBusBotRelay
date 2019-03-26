@@ -36,9 +36,9 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         static async Task RunAsync()
         {
             var relayNamespace = Configuration["RelayNamespace"];
-            var connectionName = Configuration["ConnectionName"];
-            var keyName = Configuration["KeyName"];
-            var key = Configuration["Key"];
+            var connectionName = Configuration["RelayName"];
+            var keyName = Configuration["PolicyName"];
+            var key = Configuration["PolicyKey"];
             var targetServiceAddress = new Uri(Configuration["TargetServiceAddress"]);
 
             var hybridProxy = new DispatcherService(relayNamespace, connectionName, keyName, key, targetServiceAddress);

@@ -114,7 +114,7 @@ namespace GaboG.ServiceBusRelayUtil
         {
             var incomingRequest = context.IncomingRequest;
 
-            var mappedUri = new Uri(incomingRequest.UriTemplateMatch.RequestUri.ToString().Replace(_config.SBAddress.ToString(), _config.TargetAddress.ToString()));
+            var mappedUri = new Uri(incomingRequest.UriTemplateMatch.RequestUri.ToString().Replace(_config.RelayAddress.ToString(), _config.TargetAddress.ToString()));
             var newRequest = new HttpRequestMessage(new HttpMethod(incomingRequest.Method), mappedUri);
 
             // Copy headers
