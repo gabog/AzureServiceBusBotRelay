@@ -1,7 +1,7 @@
 # Overview
-An relay utility for bots based on Azure Service Bus.  
+A relay utility for bots based on Azure Service Bus.  
 
-This utility allows you forward a message sent to a bot hosted on any channel to your local machine.
+This utility allows you to forward a message sent to a bot hosted on any channel to your local machine.
 
 It is useful for debug scenarios or for more complex situations where the BotEmulator is not enough (i.e.: you use the WebChat control hosted on a site and you need to receive ChannelData in your requests).
 
