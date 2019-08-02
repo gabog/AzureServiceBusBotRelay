@@ -196,7 +196,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
                 JToken.Parse(strInput);
                 return true;
             }
-            catch //some other exception
+            catch
             {
                 return false;
             }
