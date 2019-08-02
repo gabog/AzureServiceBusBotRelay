@@ -1,8 +1,4 @@
-﻿// Copyright (c) Microsoft. All rights reserved.
-// Licensed under the MIT license. See LICENSE file in the project root for full license information.
-
-using System;
-using System.IO;
+﻿using System;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
@@ -11,31 +7,24 @@ using System.Threading.Tasks;
 using GaboG.ServiceBusRelayUtilNetCore.Extensions;
 using Microsoft.Azure.Relay;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
 
 {
-    class DispatcherService
+    internal class DispatcherService
     {
-        private readonly string _connectionName;
-        readonly HttpClient _httpClient;
-        readonly string _hybridConnectionSubpath;
-        private readonly string _key;
-        private readonly string _keyName;
-        readonly HybridConnectionListener _listener;
-        private readonly string _relayNamespace;
+        private readonly HttpClient _httpClient;
+        private readonly string _hybridConnectionSubPath;
+        private readonly HybridConnectionListener _listener;
         private readonly Uri _targetServiceAddress;
 
         public DispatcherService(string relayNamespace, string connectionName, string keyName, string key, Uri targetServiceAddress)
         {
-            _relayNamespace = relayNamespace;
-            _connectionName = connectionName;
-            _keyName = keyName;
-            _key = key;
             _targetServiceAddress = targetServiceAddress;
 
-            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(_keyName, _key);
-            _listener = new HybridConnectionListener(new Uri(string.Format("sb://{0}/{1}", _relayNamespace, _connectionName)), tokenProvider);
+            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(keyName, key);
+            _listener = new HybridConnectionListener(new Uri($"sb://{relayNamespace}/{connectionName}"), tokenProvider);
 
             _httpClient = new HttpClient
             {
@@ -43,7 +32,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             };
             _httpClient.DefaultRequestHeaders.ExpectContinue = false;
 
-            _hybridConnectionSubpath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
+            _hybridConnectionSubPath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
         }
 
         public async Task OpenAsync(CancellationToken cancelToken)
@@ -114,7 +103,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             if (context.Request.HasEntityBody)
             {
                 requestMessage.Content = new StreamContent(context.Request.InputStream);
-                // Experiment to see if I can capture the return message instad of having the bot respoding directly (so far it doesn't work).
+                // Experiment to see if I can capture the return message instead of having the bot responding directly (so far it doesn't work).
                 //var contentStream = new MemoryStream();
                 //var writer = new StreamWriter(contentStream);
                 //var newActivity = requestMessage.Content.ReadAsStringAsync().Result.Replace("https://directline.botframework.com/", "https://localhost:44372/");
@@ -130,7 +119,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             }
 
             var relativePath = context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped);
-            relativePath = relativePath.Replace(_hybridConnectionSubpath, string.Empty, StringComparison.OrdinalIgnoreCase);
+            relativePath = relativePath.Replace(_hybridConnectionSubPath, string.Empty, StringComparison.OrdinalIgnoreCase);
             requestMessage.RequestUri = new Uri(relativePath, UriKind.RelativeOrAbsolute);
             requestMessage.Method = new HttpMethod(context.Request.HttpMethod);
 
@@ -169,13 +158,19 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         {
             var content = requestMessage.Content.ReadAsStringAsync().Result;
             Console.ForegroundColor = ConsoleColor.Yellow;
-            var s = new JsonSerializerSettings
-            {
-                Formatting = Formatting.Indented
-            };
 
-            dynamic o = JsonConvert.DeserializeObject(content);
-            var formatted = JsonConvert.SerializeObject(o, s);
+            var formatted = content;
+            if (IsValidJson(formatted))
+            {
+                var s = new JsonSerializerSettings
+                {
+                    Formatting = Formatting.Indented
+                };
+
+                dynamic o = JsonConvert.DeserializeObject(content);
+                formatted = JsonConvert.SerializeObject(o, s);
+            }
+
             Console.WriteLine(formatted);
             Console.ResetColor();
         }
@@ -186,6 +181,25 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             Console.WriteLine(ex);
             Console.WriteLine("");
             Console.ResetColor();
+        }
+
+        private static bool IsValidJson(string strInput)
+        {
+            strInput = strInput.Trim();
+            if ((!strInput.StartsWith("{") || !strInput.EndsWith("}")) && (!strInput.StartsWith("[") || !strInput.EndsWith("]")))
+            {
+                return false;
+            }
+
+            try
+            {
+                JToken.Parse(strInput);
+                return true;
+            }
+            catch //some other exception
+            {
+                return false;
+            }
         }
     }
 }

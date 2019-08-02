@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using System.Xml;
 using Microsoft.ServiceBus.Web;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 using Formatting = Newtonsoft.Json.Formatting;
 
 namespace GaboG.ServiceBusRelayUtil
@@ -193,13 +194,19 @@ namespace GaboG.ServiceBusRelayUtil
         private static void WriteJsonObject(string result)
         {
             Console.ForegroundColor = ConsoleColor.Yellow;
-            var s = new JsonSerializerSettings
-            {
-                Formatting = Formatting.Indented
-            };
 
-            dynamic o = JsonConvert.DeserializeObject(result);
-            var formatted = JsonConvert.SerializeObject(o, s);
+            var formatted = result;
+            if (IsValidJson(result))
+            {
+                var s = new JsonSerializerSettings
+                {
+                    Formatting = Formatting.Indented
+                };
+
+                dynamic o = JsonConvert.DeserializeObject(result);
+                formatted = JsonConvert.SerializeObject(o, s);
+            }
+
             Console.WriteLine(formatted);
             Console.ResetColor();
         }
@@ -237,6 +244,25 @@ namespace GaboG.ServiceBusRelayUtil
                         outgoingResponse.Headers.Add(kvp.Key, value);
                     }
                 }
+            }
+        }
+
+        private static bool IsValidJson(string strInput)
+        {
+            strInput = strInput.Trim();
+            if ((!strInput.StartsWith("{") || !strInput.EndsWith("}")) && (!strInput.StartsWith("[") || !strInput.EndsWith("]")))
+            {
+                return false;
+            }
+
+            try
+            {
+                JToken.Parse(strInput);
+                return true;
+            }
+            catch //some other exception
+            {
+                return false;
             }
         }
     }
