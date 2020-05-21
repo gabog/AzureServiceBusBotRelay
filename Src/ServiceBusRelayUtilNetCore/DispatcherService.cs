@@ -156,7 +156,10 @@ namespace GaboG.ServiceBusRelayUtilNetCore
 
         private void LogRequestActivity(HttpRequestMessage requestMessage)
         {
-            var content = requestMessage.Content.ReadAsStringAsync().Result;
+            var content = "No content";
+            if (requestMessage.Content != null)
+                content = requestMessage.Content.ReadAsStringAsync().Result;
+            
             Console.ForegroundColor = ConsoleColor.Yellow;
 
             var formatted = content;
