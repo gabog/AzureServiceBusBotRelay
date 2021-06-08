@@ -27,7 +27,8 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             var builder = new ConfigurationBuilder()
                 .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
                 .AddJsonFile("appsettings.json", true, true)
-                .AddEnvironmentVariables();
+                .AddEnvironmentVariables()
+                .AddUserSecrets(typeof(Program).Assembly);
             Configuration = builder.Build();
 
             RunAsync().GetAwaiter().GetResult();

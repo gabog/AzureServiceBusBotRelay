@@ -5,6 +5,7 @@
     <TargetFramework>net5.0</TargetFramework>
     <ApplicationIcon>App.ico</ApplicationIcon>
     <RootNamespace>GaboG.ServiceBusRelayUtilNetCore</RootNamespace>
+    <UserSecretsId>57e4c1c9-b95f-4a5c-9dc2-57b1e6ccc769</UserSecretsId>
   </PropertyGroup>
 
   <ItemGroup>
@@ -23,6 +24,7 @@
     <PackageReference Include="Microsoft.Azure.Relay" Version="2.0.15596" />
     <PackageReference Include="Microsoft.Extensions.Configuration.EnvironmentVariables" Version="5.0.0" />
     <PackageReference Include="Microsoft.Extensions.Configuration.Json" Version="5.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Configuration.UserSecrets" Version="5.0.0" />
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="System.ServiceModel.Web" Version="1.0.0" />
   </ItemGroup>
