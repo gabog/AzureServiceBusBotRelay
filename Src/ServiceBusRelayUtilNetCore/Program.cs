@@ -2,7 +2,10 @@
 using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
+using CommandLine;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
 
 // https://docs.microsoft.com/en-us/azure/service-bus-relay/service-bus-relay-rest-tutorial
 // https://github.com/Azure/azure-relay-dotnet
@@ -18,37 +21,21 @@ using Microsoft.Extensions.Configuration;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
 {
-    public class Program
+    public partial class Program
     {
-        public static IConfiguration Configuration { get; set; }
-
         public static void Main(string[] args)
         {
-            var builder = new ConfigurationBuilder()
-                .SetBasePath(AppDomain.CurrentDomain.BaseDirectory)
-                .AddJsonFile("appsettings.json", true, true)
-                .AddEnvironmentVariables()
-                .AddUserSecrets(typeof(Program).Assembly);
-            Configuration = builder.Build();
-
-            RunAsync().GetAwaiter().GetResult();
+            CommandLine.Parser.Default.ParseArguments<RelayOptions>(args)
+                .WithParsed(opt => CreateHostBuilder(opt).Build().Run());
         }
 
-        static async Task RunAsync()
-        {
-            var relayNamespace = Configuration["RelayNamespace"];
-            var connectionName = Configuration["RelayName"];
-            var keyName = Configuration["PolicyName"];
-            var key = Configuration["PolicyKey"];
-            var targetServiceAddress = new Uri(Configuration["TargetServiceAddress"]);
-
-            var hybridProxy = new DispatcherService(relayNamespace, connectionName, keyName, key, targetServiceAddress);
-
-            await hybridProxy.OpenAsync(CancellationToken.None);
-
-            Console.ReadLine();
-
-            await hybridProxy.CloseAsync(CancellationToken.None);
-        }
+        public static IHostBuilder CreateHostBuilder(RelayOptions options) =>
+            Host.CreateDefaultBuilder()
+                .ConfigureAppConfiguration(cb => cb.AddUserSecrets(typeof(Program).Assembly))
+                .ConfigureServices((hostContext, services) =>
+                {
+                    services.AddSingleton<RelayOptions>(options);
+                    services.AddHostedService<DispatcherService>();
+                });
     }
 }

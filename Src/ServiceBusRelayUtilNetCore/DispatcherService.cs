@@ -1,74 +1,59 @@
-﻿using System;
+﻿using GaboG.ServiceBusRelayUtilNetCore.Extensions;
+using Microsoft.Azure.Relay;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System;
 using System.Net;
 using System.Net.Http;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using GaboG.ServiceBusRelayUtilNetCore.Extensions;
-using Microsoft.Azure.Relay;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using static GaboG.ServiceBusRelayUtilNetCore.Program;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
-
 {
-    internal class DispatcherService
+    internal class DispatcherService : IHostedService
     {
-        private readonly HttpClient _httpClient;
-        private readonly string _hybridConnectionSubPath;
-        private readonly HybridConnectionListener _listener;
-        private readonly Uri _targetServiceAddress;
+        private HttpClient _httpClient;
+        private string _hybridConnectionSubPath;
+        private HybridConnectionListener _listener;
+        private Uri _targetServiceAddress;
+        private readonly RelayOptions _options;
+        private readonly ILogger<DispatcherService> _logger;
 
-        public DispatcherService(string relayNamespace, string connectionName, string keyName, string key, Uri targetServiceAddress)
+        public DispatcherService(RelayOptions options, ILogger<DispatcherService> logger)
         {
-            _targetServiceAddress = targetServiceAddress;
-
-            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(keyName, key);
-            _listener = new HybridConnectionListener(new Uri($"sb://{relayNamespace}/{connectionName}"), tokenProvider);
-
-            _httpClient = new HttpClient
-            {
-                BaseAddress = targetServiceAddress
-            };
-            _httpClient.DefaultRequestHeaders.ExpectContinue = false;
-
-            _hybridConnectionSubPath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
-        }
-
-        public async Task OpenAsync(CancellationToken cancelToken)
-        {
-            _listener.RequestHandler = ListenerRequestHandler;
-            await _listener.OpenAsync(cancelToken);
-            Console.WriteLine("Azure Service Bus is listening on \n\r\t{0}\n\rand routing requests to \n\r\t{1}\n\r\n\r", _listener.Address, _httpClient.BaseAddress);
-            Console.WriteLine("Press [Enter] to exit");
-        }
-
-        public Task CloseAsync(CancellationToken cancelToken)
-        {
-            _httpClient.Dispose();
-            return _listener.CloseAsync(cancelToken);
+            _options = options;
+            _logger = logger;
         }
 
         private async void ListenerRequestHandler(RelayedHttpListenerContext context)
         {
             var startTimeUtc = DateTime.UtcNow;
+            HttpStatusCode responseStatus = 0;
             try
             {
-                Console.WriteLine("Calling {0}...", _targetServiceAddress);
-                var requestMessage = CreateHttpRequestMessage(context);
+                
+                _logger.LogInformation("Received message");
+                var requestMessage = await CreateHttpRequestMessage(context);
+                _logger.LogInformation($"{requestMessage.Method} to {_targetServiceAddress}");
                 var responseMessage = await _httpClient.SendAsync(requestMessage);
+                responseStatus = responseMessage.StatusCode;
                 await SendResponseAsync(context, responseMessage);
                 await context.Response.CloseAsync();
             }
-
             catch (Exception ex)
             {
-                LogException(ex);
+                _logger.LogError(ex, ex.Message);
                 SendErrorResponse(ex, context);
             }
             finally
             {
-                LogRequest(startTimeUtc);
+                var stopTimeUtc = DateTime.UtcNow;
+                double milliseconds = stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds;
+                _logger.LogInformation("Response {0} took {1:N0} ms", responseStatus, milliseconds);
             }
         }
 
@@ -97,7 +82,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             context.Response.Close();
         }
 
-        private HttpRequestMessage CreateHttpRequestMessage(RelayedHttpListenerContext context)
+        private async Task<HttpRequestMessage> CreateHttpRequestMessage(RelayedHttpListenerContext context)
         {
             var requestMessage = new HttpRequestMessage();
             if (context.Request.HasEntityBody)
@@ -135,76 +120,61 @@ namespace GaboG.ServiceBusRelayUtilNetCore
                 requestMessage.Headers.Add(headerName, context.Request.Headers[headerName]);
             }
 
-            LogRequestActivity(requestMessage);
+            await LogRequestActivity(requestMessage);
 
             return requestMessage;
         }
 
-        private void LogRequest(DateTime startTimeUtc)
+        private async Task LogRequestActivity(HttpRequestMessage requestMessage)
         {
-            var stopTimeUtc = DateTime.UtcNow;
-            //var buffer = new StringBuilder();
-            //buffer.Append($"{startTimeUtc.ToString("s", CultureInfo.InvariantCulture)}, ");
-            //buffer.Append($"\"{context.Request.HttpMethod} {context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped)}\", ");
-            //buffer.Append($"{(int)context.Response.StatusCode}, ");
-            //buffer.Append($"{(int)stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds}");
-            //Console.WriteLine(buffer);
-
-            Console.WriteLine("...and back {0:N0} ms...", stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds);
-            Console.WriteLine("");
-        }
-
-        private void LogRequestActivity(HttpRequestMessage requestMessage)
-        {
-            var content = requestMessage.Content?.ReadAsStringAsync().Result;
-            if (content is null)
+            if (requestMessage.Content is null)
             {
-                Console.WriteLine("<no content>");
+                _logger.LogInformation("<no content>");
                 return;
             }
-            Console.ForegroundColor = ConsoleColor.Yellow;
+            string content = await requestMessage.Content.ReadAsStringAsync();
 
             var formatted = content;
-            if (IsValidJson(formatted))
-            {
-                var s = new JsonSerializerSettings
-                {
-                    Formatting = Formatting.Indented
-                };
-
-                dynamic o = JsonConvert.DeserializeObject(content);
-                formatted = JsonConvert.SerializeObject(o, s);
-            }
-
-            Console.WriteLine(formatted);
-            Console.ResetColor();
-        }
-
-        private static void LogException(Exception ex)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine(ex);
-            Console.WriteLine("");
-            Console.ResetColor();
-        }
-
-        private static bool IsValidJson(string strInput)
-        {
-            strInput = strInput.Trim();
-            if ((!strInput.StartsWith("{") || !strInput.EndsWith("}")) && (!strInput.StartsWith("[") || !strInput.EndsWith("]")))
-            {
-                return false;
-            }
 
             try
             {
-                JToken.Parse(strInput);
-                return true;
+                // attempt to parse and pretty print as json
+                var doc = JsonDocument.Parse(content);
+                formatted = PrettyPrint(doc.RootElement, true);
             }
-            catch
+            catch { }
+
+            _logger.LogDebug(formatted);
+        }
+
+        public static string PrettyPrint(JsonElement element, bool indent)
+        => element.ValueKind == JsonValueKind.Undefined ? "" : JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = indent });
+
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {           
+            _targetServiceAddress = new Uri(_options.TargetServiceAddress);
+
+            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(_options.PolicyName, _options.PolicyKey);
+            _listener = new HybridConnectionListener(new Uri($"sb://{_options.RelayNamespace}/{_options.RelayName}"), tokenProvider);
+
+            _httpClient = new HttpClient
             {
-                return false;
-            }
+                BaseAddress = _targetServiceAddress
+            };
+            _httpClient.DefaultRequestHeaders.ExpectContinue = false;
+
+            _hybridConnectionSubPath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
+
+            _listener.RequestHandler = ListenerRequestHandler;
+            await _listener.OpenAsync(cancellationToken);
+
+            _logger.LogInformation("Azure Service Bus is listening on {0}\nand routing requests to {1}", _listener.Address, _httpClient.BaseAddress);
+        }
+
+        public async Task StopAsync(CancellationToken cancellationToken)
+        {
+                _httpClient.Dispose();
+                await _listener.CloseAsync(cancellationToken);
         }
     }
 }
