@@ -68,7 +68,7 @@
         }
     ],
     "outputs": {
-        "HybridConnectionSharedAccessPolicyPrimaryKey": {
+        "SharedAccessPolicyKey": {
             "type": "string",
             "value": "[listkeys(variables('hcAuthorizationRuleResourceId'), variables('apiVersion')).primaryKey]"
         },
