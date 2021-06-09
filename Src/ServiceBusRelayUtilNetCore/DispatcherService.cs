@@ -8,8 +8,7 @@ using GaboG.ServiceBusRelayUtilNetCore.Extensions;
 using Microsoft.Azure.Relay;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
+using System.Text.Json;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
 {
@@ -45,7 +44,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             try
             {
                 Console.WriteLine("Calling {0}...", _targetServiceAddress);
-                var requestMessage = CreateHttpRequestMessage(context);
+                var requestMessage = await CreateHttpRequestMessage(context);
                 var responseMessage = await _httpClient.SendAsync(requestMessage);
                 await SendResponseAsync(context, responseMessage);
                 await context.Response.CloseAsync();
@@ -87,7 +86,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             context.Response.Close();
         }
 
-        private HttpRequestMessage CreateHttpRequestMessage(RelayedHttpListenerContext context)
+        private async Task<HttpRequestMessage> CreateHttpRequestMessage(RelayedHttpListenerContext context)
         {
             var requestMessage = new HttpRequestMessage();
             if (context.Request.HasEntityBody)
@@ -125,7 +124,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
                 requestMessage.Headers.Add(headerName, context.Request.Headers[headerName]);
             }
 
-            LogRequestActivity(requestMessage);
+            await LogRequestActivity(requestMessage);
 
             return requestMessage;
         }
@@ -144,31 +143,34 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             Console.WriteLine("");
         }
 
-        private void LogRequestActivity(HttpRequestMessage requestMessage)
+        private async Task LogRequestActivity(HttpRequestMessage requestMessage)
         {
-            var content = requestMessage.Content?.ReadAsStringAsync().Result;
+            var content = await requestMessage.Content?.ReadAsStringAsync();
             if (content is null)
             {
                 Console.WriteLine("<no content>");
                 return;
             }
+
             Console.ForegroundColor = ConsoleColor.Yellow;
 
             var formatted = content;
-            if (IsValidJson(formatted))
-            {
-                var s = new JsonSerializerSettings
-                {
-                    Formatting = Formatting.Indented
-                };
 
-                dynamic o = JsonConvert.DeserializeObject(content);
-                formatted = JsonConvert.SerializeObject(o, s);
+            try
+            {
+                // attempt to parse and pretty print as json
+                var doc = JsonDocument.Parse(content);
+                formatted = PrettyPrint(doc.RootElement, true);
             }
+            catch { }
 
             Console.WriteLine(formatted);
             Console.ResetColor();
         }
+
+        public static string PrettyPrint(JsonElement element, bool indent)
+        => element.ValueKind == JsonValueKind.Undefined ? "" : JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = indent });
+
 
         private static void LogException(Exception ex)
         {
@@ -176,25 +178,6 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             Console.WriteLine(ex);
             Console.WriteLine("");
             Console.ResetColor();
-        }
-
-        private static bool IsValidJson(string strInput)
-        {
-            strInput = strInput.Trim();
-            if ((!strInput.StartsWith("{") || !strInput.EndsWith("}")) && (!strInput.StartsWith("[") || !strInput.EndsWith("]")))
-            {
-                return false;
-            }
-
-            try
-            {
-                JToken.Parse(strInput);
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
