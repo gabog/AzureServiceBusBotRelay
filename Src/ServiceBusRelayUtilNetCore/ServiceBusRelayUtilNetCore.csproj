@@ -6,6 +6,12 @@
     <ApplicationIcon>App.ico</ApplicationIcon>
     <RootNamespace>GaboG.ServiceBusRelayUtilNetCore</RootNamespace>
     <UserSecretsId>57e4c1c9-b95f-4a5c-9dc2-57b1e6ccc769</UserSecretsId>
+
+    <PublishSingleFile>true</PublishSingleFile>
+    <SelfContained>true</SelfContained>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <!--<PublishTrimmed>true</PublishTrimmed>-->
+    <PublishReadyToRun>true</PublishReadyToRun> 
   </PropertyGroup>
 
   <ItemGroup>
