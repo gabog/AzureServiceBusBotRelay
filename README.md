@@ -55,7 +55,7 @@ Part of this code is based on the work that [Pedro Felix](https://github.com/pmh
     - The **app.config** is in the same folder and can be edited as credentials change without needing to recompile the project.
 
 ### Depoloy an Azure Relay service
-[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https://raw.githubusercontent.com/negativeeddy/AzureServiceBusBotRelay/commandline/Deployment/deploy.json)
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fnegativeeddy%2FAzureServiceBusBotRelay%2Fcommandline%2FDeployment%2Fdeploy.json)
 
 ### Building with .Net Core
 
