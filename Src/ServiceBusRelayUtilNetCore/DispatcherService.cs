@@ -10,6 +10,7 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using static GaboG.ServiceBusRelayUtilNetCore.Program;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
 {
@@ -19,12 +20,12 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         private string _hybridConnectionSubPath;
         private HybridConnectionListener _listener;
         private Uri _targetServiceAddress;
-        private readonly IConfiguration _config;
+        private readonly RelayOptions _options;
         private readonly ILogger<DispatcherService> _logger;
 
-        public DispatcherService(IConfiguration config, ILogger<DispatcherService> logger)
+        public DispatcherService(RelayOptions options, ILogger<DispatcherService> logger)
         {
-            _config = config;
+            _options = options;
             _logger = logger;
         }
 
@@ -135,12 +136,12 @@ namespace GaboG.ServiceBusRelayUtilNetCore
 
         private async Task LogRequestActivity(HttpRequestMessage requestMessage)
         {
-            var content = await requestMessage.Content?.ReadAsStringAsync();
-            if (content is null)
+            if (requestMessage.Content is null)
             {
                 _logger.LogInformation("<no content>");
                 return;
             }
+            string content = await requestMessage.Content.ReadAsStringAsync();
 
             var formatted = content;
 
@@ -159,17 +160,11 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         => element.ValueKind == JsonValueKind.Undefined ? "" : JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = indent });
 
         public async Task StartAsync(CancellationToken cancellationToken)
-        {
-            var config = _config;
-            string relayNamespace = config["RelayNamespace"];
-            string connectionName = config["RelayName"];
-            string keyName = config["PolicyName"];
-            string key = config["PolicyKey"];
+        {           
+            _targetServiceAddress = new Uri(_options.TargetServiceAddress);
 
-            _targetServiceAddress = new Uri(config["TargetServiceAddress"]);
-
-            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(keyName, key);
-            _listener = new HybridConnectionListener(new Uri($"sb://{relayNamespace}/{connectionName}"), tokenProvider);
+            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(_options.PolicyName, _options.PolicyKey);
+            _listener = new HybridConnectionListener(new Uri($"sb://{_options.RelayNamespace}/{_options.RelayName}"), tokenProvider);
 
             _httpClient = new HttpClient
             {
