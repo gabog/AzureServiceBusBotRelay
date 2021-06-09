@@ -21,46 +21,8 @@ using Microsoft.Extensions.Hosting;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
 {
-    public class Program
+    public partial class Program
     {
-        public class RelayOptions
-        {
-            [Option(
-                'n',
-                "namespace",
-                Required = true,
-                HelpText = "The name of the relay's namespace, e.g. '[Your Namespace].servicebus.windows.net'")]
-            public string RelayNamespace { get; set; }
-            
-            [Option(
-                'r', 
-                "relay",
-                Required = true,
-                HelpText = "The name of the relay")]
-            public string RelayName { get; set; }
-            
-            [Option(
-                'p', 
-                "policy",
-                Required = true,
-                HelpText = "The name of the relay's Shared Access Policy")]
-            public string PolicyName { get; set; }
-            
-            [Option(
-                'k', 
-                "key",
-                Required = true,
-                HelpText = "The Shared Access Policy's key")]
-            public string PolicyKey { get; set; }
-            
-            [Option(
-                'b', 
-                "botUri",
-                Required = true,
-                HelpText = "The url to your local bot e.g. 'http://localhost:[PORT]'")]
-            public string TargetServiceAddress { get; set; }
-        }
-
         public static void Main(string[] args)
         {
             CommandLine.Parser.Default.ParseArguments<RelayOptions>(args)
