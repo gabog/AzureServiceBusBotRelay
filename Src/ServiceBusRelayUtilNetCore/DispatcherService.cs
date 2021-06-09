@@ -25,19 +25,6 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             _config = config;
         }
 
-        private async Task OpenAsync(CancellationToken cancelToken)
-        {
-            _listener.RequestHandler = ListenerRequestHandler;
-            await _listener.OpenAsync(cancelToken);
-            Console.WriteLine("Azure Service Bus is listening on \n\r\t{0}\n\rand routing requests to \n\r\t{1}\n\r\n\r", _listener.Address, _httpClient.BaseAddress);
-        }
-
-        private Task CloseAsync(CancellationToken cancelToken)
-        {
-            _httpClient.Dispose();
-            return _listener.CloseAsync(cancelToken);
-        }
-
         private async void ListenerRequestHandler(RelayedHttpListenerContext context)
         {
             var startTimeUtc = DateTime.UtcNow;
@@ -49,7 +36,6 @@ namespace GaboG.ServiceBusRelayUtilNetCore
                 await SendResponseAsync(context, responseMessage);
                 await context.Response.CloseAsync();
             }
-
             catch (Exception ex)
             {
                 LogException(ex);
@@ -201,12 +187,16 @@ namespace GaboG.ServiceBusRelayUtilNetCore
 
             _hybridConnectionSubPath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
 
-            await OpenAsync(CancellationToken.None);
+            _listener.RequestHandler = ListenerRequestHandler;
+            await _listener.OpenAsync(cancellationToken);
+
+            Console.WriteLine("Azure Service Bus is listening on \n\r\t{0}\n\rand routing requests to \n\r\t{1}\n\r\n\r", _listener.Address, _httpClient.BaseAddress);
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-            await CloseAsync(CancellationToken.None);
+                _httpClient.Dispose();
+                await _listener.CloseAsync(cancellationToken);
         }
     }
 }
