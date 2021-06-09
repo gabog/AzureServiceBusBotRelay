@@ -32,12 +32,15 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         private async void ListenerRequestHandler(RelayedHttpListenerContext context)
         {
             var startTimeUtc = DateTime.UtcNow;
+            HttpStatusCode responseStatus = 0;
             try
             {
                 
-                _logger.LogInformation("Calling {0}...", _targetServiceAddress);
+                _logger.LogInformation("Received message");
                 var requestMessage = await CreateHttpRequestMessage(context);
+                _logger.LogInformation($"{requestMessage.Method} to {_targetServiceAddress}");
                 var responseMessage = await _httpClient.SendAsync(requestMessage);
+                responseStatus = responseMessage.StatusCode;
                 await SendResponseAsync(context, responseMessage);
                 await context.Response.CloseAsync();
             }
@@ -48,7 +51,9 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             }
             finally
             {
-                LogRequest(startTimeUtc);
+                var stopTimeUtc = DateTime.UtcNow;
+                double milliseconds = stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds;
+                _logger.LogInformation("Response {0} took {1:N0} ms", responseStatus, milliseconds);
             }
         }
 
@@ -118,20 +123,6 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             await LogRequestActivity(requestMessage);
 
             return requestMessage;
-        }
-
-        private void LogRequest(DateTime startTimeUtc)
-        {
-            var stopTimeUtc = DateTime.UtcNow;
-            //var buffer = new StringBuilder();
-            //buffer.Append($"{startTimeUtc.ToString("s", CultureInfo.InvariantCulture)}, ");
-            //buffer.Append($"\"{context.Request.HttpMethod} {context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped)}\", ");
-            //buffer.Append($"{(int)context.Response.StatusCode}, ");
-            //buffer.Append($"{(int)stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds}");
-            //_logger.LogInformation(buffer);
-
-            _logger.LogInformation("...and back {0:N0} ms...", stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds);
-            _logger.LogInformation("");
         }
 
         private async Task LogRequestActivity(HttpRequestMessage requestMessage)
