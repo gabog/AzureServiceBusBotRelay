@@ -1,14 +1,15 @@
-﻿using System;
-using System.Net;
-using System.Net.Http;
-using System.Net.Http.Headers;
-using System.Threading;
-using System.Threading.Tasks;
-using GaboG.ServiceBusRelayUtilNetCore.Extensions;
+﻿using GaboG.ServiceBusRelayUtilNetCore.Extensions;
 using Microsoft.Azure.Relay;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using System;
+using System.Net;
+using System.Net.Http;
+using System.Net.Http.Headers;
 using System.Text.Json;
+using System.Threading;
+using System.Threading.Tasks;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
 {
@@ -19,10 +20,12 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         private HybridConnectionListener _listener;
         private Uri _targetServiceAddress;
         private readonly IConfiguration _config;
+        private readonly ILogger<DispatcherService> _logger;
 
-        public DispatcherService(IConfiguration config)
+        public DispatcherService(IConfiguration config, ILogger<DispatcherService> logger)
         {
             _config = config;
+            _logger = logger;
         }
 
         private async void ListenerRequestHandler(RelayedHttpListenerContext context)
@@ -30,7 +33,8 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             var startTimeUtc = DateTime.UtcNow;
             try
             {
-                Console.WriteLine("Calling {0}...", _targetServiceAddress);
+                
+                _logger.LogInformation("Calling {0}...", _targetServiceAddress);
                 var requestMessage = await CreateHttpRequestMessage(context);
                 var responseMessage = await _httpClient.SendAsync(requestMessage);
                 await SendResponseAsync(context, responseMessage);
@@ -38,7 +42,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             }
             catch (Exception ex)
             {
-                LogException(ex);
+                _logger.LogError(ex, ex.Message);
                 SendErrorResponse(ex, context);
             }
             finally
@@ -123,10 +127,10 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             //buffer.Append($"\"{context.Request.HttpMethod} {context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped)}\", ");
             //buffer.Append($"{(int)context.Response.StatusCode}, ");
             //buffer.Append($"{(int)stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds}");
-            //Console.WriteLine(buffer);
+            //_logger.LogInformation(buffer);
 
-            Console.WriteLine("...and back {0:N0} ms...", stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds);
-            Console.WriteLine("");
+            _logger.LogInformation("...and back {0:N0} ms...", stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds);
+            _logger.LogInformation("");
         }
 
         private async Task LogRequestActivity(HttpRequestMessage requestMessage)
@@ -134,11 +138,9 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             var content = await requestMessage.Content?.ReadAsStringAsync();
             if (content is null)
             {
-                Console.WriteLine("<no content>");
+                _logger.LogInformation("<no content>");
                 return;
             }
-
-            Console.ForegroundColor = ConsoleColor.Yellow;
 
             var formatted = content;
 
@@ -150,21 +152,11 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             }
             catch { }
 
-            Console.WriteLine(formatted);
-            Console.ResetColor();
+            _logger.LogDebug(formatted);
         }
 
         public static string PrettyPrint(JsonElement element, bool indent)
         => element.ValueKind == JsonValueKind.Undefined ? "" : JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = indent });
-
-
-        private static void LogException(Exception ex)
-        {
-            Console.ForegroundColor = ConsoleColor.Red;
-            Console.WriteLine(ex);
-            Console.WriteLine("");
-            Console.ResetColor();
-        }
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
@@ -190,7 +182,7 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             _listener.RequestHandler = ListenerRequestHandler;
             await _listener.OpenAsync(cancellationToken);
 
-            Console.WriteLine("Azure Service Bus is listening on \n\r\t{0}\n\rand routing requests to \n\r\t{1}\n\r\n\r", _listener.Address, _httpClient.BaseAddress);
+            _logger.LogInformation("Azure Service Bus is listening on {0}\nand routing requests to {1}", _listener.Address, _httpClient.BaseAddress);
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
