@@ -6,44 +6,34 @@ using System.Threading;
 using System.Threading.Tasks;
 using GaboG.ServiceBusRelayUtilNetCore.Extensions;
 using Microsoft.Azure.Relay;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Hosting;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 
 namespace GaboG.ServiceBusRelayUtilNetCore
-
 {
-    internal class DispatcherService
+    internal class DispatcherService : IHostedService
     {
-        private readonly HttpClient _httpClient;
-        private readonly string _hybridConnectionSubPath;
-        private readonly HybridConnectionListener _listener;
-        private readonly Uri _targetServiceAddress;
+        private HttpClient _httpClient;
+        private string _hybridConnectionSubPath;
+        private HybridConnectionListener _listener;
+        private Uri _targetServiceAddress;
+        private readonly IConfiguration _config;
 
-        public DispatcherService(string relayNamespace, string connectionName, string keyName, string key, Uri targetServiceAddress)
+        public DispatcherService(IConfiguration config)
         {
-            _targetServiceAddress = targetServiceAddress;
-
-            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(keyName, key);
-            _listener = new HybridConnectionListener(new Uri($"sb://{relayNamespace}/{connectionName}"), tokenProvider);
-
-            _httpClient = new HttpClient
-            {
-                BaseAddress = targetServiceAddress
-            };
-            _httpClient.DefaultRequestHeaders.ExpectContinue = false;
-
-            _hybridConnectionSubPath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
+            _config = config;
         }
 
-        public async Task OpenAsync(CancellationToken cancelToken)
+        private async Task OpenAsync(CancellationToken cancelToken)
         {
             _listener.RequestHandler = ListenerRequestHandler;
             await _listener.OpenAsync(cancelToken);
             Console.WriteLine("Azure Service Bus is listening on \n\r\t{0}\n\rand routing requests to \n\r\t{1}\n\r\n\r", _listener.Address, _httpClient.BaseAddress);
-            Console.WriteLine("Press [Enter] to exit");
         }
 
-        public Task CloseAsync(CancellationToken cancelToken)
+        private Task CloseAsync(CancellationToken cancelToken)
         {
             _httpClient.Dispose();
             return _listener.CloseAsync(cancelToken);
@@ -205,6 +195,35 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             {
                 return false;
             }
+        }
+
+        public async Task StartAsync(CancellationToken cancellationToken)
+        {
+            var config = _config;
+            string relayNamespace = config["RelayNamespace"];
+            string connectionName = config["RelayName"];
+            string keyName = config["PolicyName"];
+            string key = config["PolicyKey"];
+
+            _targetServiceAddress = new Uri(config["TargetServiceAddress"]);
+
+            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(keyName, key);
+            _listener = new HybridConnectionListener(new Uri($"sb://{relayNamespace}/{connectionName}"), tokenProvider);
+
+            _httpClient = new HttpClient
+            {
+                BaseAddress = _targetServiceAddress
+            };
+            _httpClient.DefaultRequestHeaders.ExpectContinue = false;
+
+            _hybridConnectionSubPath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
+
+            await OpenAsync(CancellationToken.None);
+        }
+
+        public async Task StopAsync(CancellationToken cancellationToken)
+        {
+            await CloseAsync(CancellationToken.None);
         }
     }
 }
