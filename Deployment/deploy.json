@@ -1,0 +1,92 @@
+{
+    "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+    "contentVersion": "1.0.0.0",
+    "parameters": {
+        "namespaceName": {
+            "type": "string",
+            "metadata": {
+                "description": "Name of the Azure Relay namespace"
+            }
+        },
+        "relayName": {
+            "type": "string",
+            "defaultValue": "botrelay",
+            "metadata": {
+                "description": "Name of the relay connection"
+            }
+        },
+        "relaySharedAccessPolicyName": {
+            "type": "string",
+            "defaultValue": "SendAndListenPolicy",
+            "metadata": {
+                "description": "Name of the relay's Shared Access Policy"
+            }
+        }
+    },
+    "variables": {
+        "apiVersion": "2017-04-01",
+        "location": "[resourceGroup().location]",
+        "hcAuthorizationRuleResourceId": "[resourceId('Microsoft.Relay/namespaces/HybridConnections/authorizationRules', parameters('namespaceName'), parameters('relayName'), parameters ('relaySharedAccessPolicyName'))]"
+    },
+    "resources": [
+        {
+            "apiVersion": "[variables('apiVersion')]",
+            "name": "[parameters('namespaceName')]",
+            "type": "Microsoft.Relay/Namespaces",
+            "location": "[variables('location')]",
+            "kind": "Relay",
+            "resources": [
+                {
+                    "apiVersion": "[variables('apiVersion')]",
+                    "name": "[parameters('relayName')]",
+                    "type": "HybridConnections",
+                    "dependsOn": [
+                        "[concat('Microsoft.Relay/namespaces/', parameters('namespaceName'))]"
+                    ],
+                    "properties": {
+                        "requiresClientAuthorization": "false",
+                        "userMetadata": "Meta Data supplied by user hybridConnections"
+                    },
+                    "resources": [
+                        {
+                            "apiVersion": "[variables('apiVersion')]",
+                            "name": "[parameters('relaySharedAccessPolicyName')]",
+                            "type": "authorizationRules",
+                            "dependsOn": [
+                                "[parameters('relayName')]"
+                            ],
+                            "properties": {
+                                "Rights": [
+                                    "Send",
+                                    "Listen"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            ]
+        }
+    ],
+    "outputs": {
+        "SharedAccessPolicyKey": {
+            "type": "string",
+            "value": "[listkeys(variables('hcAuthorizationRuleResourceId'), variables('apiVersion')).primaryKey]"
+        },
+        "SharedAccessPolicyName": {
+            "type": "string",
+            "value": "[parameters ('relaySharedAccessPolicyName')]"
+        },
+        "RelayName": {
+            "type": "string",
+            "value": "[parameters('relayName')]"
+        },
+        "Namespace": {
+            "type": "string",
+            "value": "[concat(parameters('namespaceName'),'.servicebus.windows.net')]"
+        },
+        "MessagingEndpoint": {
+            "type": "string",
+            "value": "[concat('https://', parameters('namespaceName'), '.servicebus.windows.net/', parameters('relayName'), '/api/messages')]"
+        }
+    }
+}
