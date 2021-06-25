@@ -2,7 +2,6 @@
 using System.Configuration;
 using System.ServiceModel.Channels;
 using System.ServiceModel.Web;
-using Microsoft.ServiceBus;
 
 namespace GaboG.ServiceBusRelayUtil
 {

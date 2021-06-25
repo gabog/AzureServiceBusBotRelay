@@ -10,7 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Xml;
-using Microsoft.ServiceBus.Web;
+using Azure.Messaging.ServiceBus;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using Formatting = Newtonsoft.Json.Formatting;
@@ -44,7 +44,7 @@ namespace GaboG.ServiceBusRelayUtil
 
         [WebGet(UriTemplate = "*")]
         [OperationContract(AsyncPattern = true)]
-        public async Task<Message> GetAsync()
+        public async Task<ServiceBusMessage> GetAsync()
         {
             try
             {
@@ -64,8 +64,9 @@ namespace GaboG.ServiceBusRelayUtil
 
                 Console.WriteLine("...reading and creating response...");
                 CopyHttpResponseMessageToOutgoingResponse(response, context.OutgoingResponse);
-                var stream = response.Content != null ? await response.Content.ReadAsStreamAsync() : null;
-                var message = StreamMessageHelper.CreateMessage(MessageVersion.None, "GETRESPONSE", stream ?? new MemoryStream());
+                var content = response.Content != null ? await response.Content.ReadAsStringAsync() : null;
+                var message = new ServiceBusMessage(content ?? string.Empty);
+                //var message = StreamMessageHelper.CreateMessage(MessageVersion.None, "GETRESPONSE", stream ?? new MemoryStream());
                 Console.WriteLine("...and done (total time: {0:N0} ms).", DateTime.Now.Subtract(ti0).TotalMilliseconds);
                 Console.WriteLine("");
                 return message;
