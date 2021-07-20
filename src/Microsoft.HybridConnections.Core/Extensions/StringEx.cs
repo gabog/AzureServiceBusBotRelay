@@ -3,7 +3,7 @@
 
 using System;
 
-namespace GaboG.ServiceBusRelayUtilNetCore.Extensions
+namespace Microsoft.ServiceBusBotRelay.Core.Extensions
 {
     public static class StringEx
     {
