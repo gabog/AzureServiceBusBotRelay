@@ -40,12 +40,11 @@ namespace Microsoft.HybridConnections.Relay
             try
             {
                 _relayConnection = await _client.CreateConnectionAsync();
-                Console.WriteLine("Websocket Client: Websocket connection has been established succesfully.");
                 return true;
             }
             catch (EndpointNotFoundException)
             {
-                Logger.LogMessage($"Websocket Client: There are no listeners connected for this endpoint: {_client.Address.AbsoluteUri}. Will retry later.");
+                Logger.LogRequest("WebSocket", _client.Address.LocalPath, "\u001b[30m Failed \u001b[0m", $"There are no listeners connected for this endpoint: {_client.Address.AbsoluteUri}.");
                 return false;
             }
             catch (Exception e)
@@ -73,13 +72,15 @@ namespace Microsoft.HybridConnections.Relay
         /// </summary>
         /// <param name="context"></param>
         /// <returns></returns>
-        public async Task RelayAsync(RelayedHttpListenerContext context)
+        public async Task<string> RelayAsync(RelayedHttpListenerContext context)
         {
             try
             {
                 var requestMessageSer = await RelayedHttpListenerRequestSerializer.SerializeAsync(context.Request);
                 // Send to the websocket listener
                 await SendAsync(requestMessageSer);
+
+                return requestMessageSer;
             }
             catch (Exception e)
             {

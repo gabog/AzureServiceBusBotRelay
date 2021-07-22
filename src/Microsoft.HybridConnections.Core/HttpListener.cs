@@ -1,5 +1,4 @@
 ﻿using Microsoft.Azure.Relay;
-using Microsoft.ServiceBusBotRelay.Core.Extensions;
 using System;
 using System.Net;
 using System.Net.Http;
@@ -11,10 +10,8 @@ namespace Microsoft.HybridConnections.Core
 {
     public class HttpListener
     {
-        private readonly HttpClient _httpClient;
-        private readonly string _hybridConnectionSubPath;
+        private readonly HttpClient _httpClient = null;
         private readonly HybridConnectionListener _listener;
-        private readonly string _targetServiceAddress;
 
         public CancellationTokenSource CTS { get; set; }
 
@@ -26,54 +23,110 @@ namespace Microsoft.HybridConnections.Core
         /// <param name="keyName"></param>
         /// <param name="key"></param>
         /// <param name="targetServiceAddress"></param>
-        public HttpListener(string relayNamespace, string connectionName, string keyName, string key, string targetServiceAddress, CancellationTokenSource cts)
+        /// <param name="eventHandler"></param>
+        /// <param name="cts"></param>
+        public HttpListener(string relayNamespace, string connectionName, string keyName, string key, string targetServiceAddress, Action<string> eventHandler, CancellationTokenSource cts)
         {
-            _targetServiceAddress = targetServiceAddress;
             CTS = cts;
 
             var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(keyName, key);
             _listener = new HybridConnectionListener(new Uri($"sb://{relayNamespace}/{connectionName}"), tokenProvider);
 
             // Subscribe to the status events.
-            _listener.Connecting += (o, e) => { Console.WriteLine("Connecting"); };
-            _listener.Offline += (o, e) => { Console.WriteLine("Offline"); };
-            _listener.Online += (o, e) => { Console.WriteLine("Online"); };
+            _listener.Connecting += (o, e) => { eventHandler("connecting"); };
+            _listener.Offline += (o, e) => { eventHandler("offline"); };
+            _listener.Online += (o, e) => { eventHandler("online"); };
 
-            _httpClient = new HttpClient
+            if (!string.IsNullOrEmpty(targetServiceAddress))
             {
-                BaseAddress = new Uri(targetServiceAddress, UriKind.RelativeOrAbsolute)
-            };
-            _httpClient.DefaultRequestHeaders.ExpectContinue = false;
-
-            _hybridConnectionSubPath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
-
-            Console.WriteLine($"Http Listener: Http Relay Listener is listening on \n\r\t{_listener.Address}\n\rand routing requests to \n\r\t{_targetServiceAddress}\n\r");
+                // Send the request message via Http
+                _httpClient = new HttpClient { BaseAddress = new Uri(targetServiceAddress, UriKind.RelativeOrAbsolute) };
+                _httpClient.DefaultRequestHeaders.ExpectContinue = false;
+            }
         }
 
 
         /// <summary>
-        /// The constructor
+        /// Convert RelayedHttpListenerContext into HttpRequestMessage
         /// </summary>
-        /// <param name="relayNamespace"></param>
+        /// <param name="context"></param>
         /// <param name="connectionName"></param>
-        /// <param name="keyName"></param>
-        /// <param name="key"></param>
-        public HttpListener(string relayNamespace, string connectionName, string keyName, string key, CancellationTokenSource cts)
+        /// <returns></returns>
+        public static async Task<HttpRequestMessage> CreateHttpRequestMessageAsync(RelayedHttpListenerContext context, string connectionName)
         {
-            CTS = cts;
+            var requestMessage = new HttpRequestMessage();
+            if (context.Request.HasEntityBody)
+            {
+                requestMessage.Content = new StreamContent(context.Request.InputStream);
+                var contentType = context.Request.Headers[HttpRequestHeader.ContentType];
+                if (!string.IsNullOrEmpty(contentType))
+                {
+                    requestMessage.Content.Headers.ContentType = MediaTypeHeaderValue.Parse(contentType);
+                }
+            }
 
-            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(keyName, key);
-            _listener = new HybridConnectionListener(new Uri($"sb://{relayNamespace}/{connectionName}"), tokenProvider);
+            var relativePath = context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped);
+            relativePath = relativePath.Replace($"/{connectionName}/", string.Empty, StringComparison.OrdinalIgnoreCase);
+            requestMessage.RequestUri = new Uri(relativePath, UriKind.RelativeOrAbsolute);
+            requestMessage.Method = new HttpMethod(context.Request.HttpMethod);
 
-            // Subscribe to the status events.
-            _listener.Connecting += (o, e) => { Console.WriteLine("Connecting"); };
-            _listener.Offline += (o, e) => { Console.WriteLine("Offline"); };
-            _listener.Online += (o, e) => { Console.WriteLine("Online"); };
+            foreach (var headerName in context.Request.Headers.AllKeys)
+            {
+                if (string.Equals(headerName, "Host", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(headerName, "Content-Type", StringComparison.OrdinalIgnoreCase))
+                {
+                    // Don't flow these headers here
+                    continue;
+                }
 
-            Console.WriteLine($"Http Listener: Http Relay Listener is listening on \n\r\t{_listener.Address}\n\rand routing requests to Websocket connection\n\r");
+                requestMessage.Headers.Add(headerName, context.Request.Headers[headerName]);
+            }
+
+            await Logger.LogRequestActivityAsync(requestMessage);
+
+            //var requestMessageSer = await RelayedHttpListenerRequestSerializer.SerializeAsync(requestMessage);
+            //var deserializedRequestMessage = RelayedHttpListenerRequestSerializer.Deserialize(requestMessageSer);
+
+            return requestMessage;
         }
 
 
+        /// <summary>
+        /// Sends the response to the server
+        /// </summary>
+        /// <param name="context"></param>
+        /// <param name="responseMessage"></param>
+        /// <returns></returns>
+        public static async Task SendResponseAsync(RelayedHttpListenerContext context, HttpResponseMessage responseMessage)
+        {
+            context.Response.StatusCode = responseMessage.StatusCode;
+            context.Response.StatusDescription = responseMessage.ReasonPhrase;
+            foreach (var header in responseMessage.Headers)
+            {
+                if (string.Equals(header.Key, "Transfer-Encoding"))
+                {
+                    continue;
+                }
+
+                context.Response.Headers.Add(header.Key, string.Join(",", header.Value));
+            }
+
+            var responseStream = await responseMessage.Content.ReadAsStreamAsync();
+            await responseStream.CopyToAsync(context.Response.OutputStream);
+        }
+
+
+        /// <summary>
+        /// Sends the error response
+        /// </summary>
+        /// <param name="ex"></param>
+        /// <param name="context"></param>
+        public static void SendErrorResponse(Exception ex, RelayedHttpListenerContext context)
+        {
+            context.Response.StatusCode = HttpStatusCode.InternalServerError;
+            context.Response.StatusDescription = $"Http Listener: Internal Server Error: {ex.GetType().FullName}: {ex.Message}";
+            context.Response.Close();
+        }
 
         /// <summary>
         // Opening the listener establishes the control channel to
@@ -86,8 +139,6 @@ namespace Microsoft.HybridConnections.Core
         {
             _listener.RequestHandler = relayHandler;
             await _listener.OpenAsync(CTS.Token);
-
-            Console.WriteLine("Press [Enter] to exit");
 
             // Provide callback for a cancellation token that will close the listener.
             CTS.Token.Register(() => _listener.CloseAsync(CancellationToken.None));
@@ -114,7 +165,7 @@ namespace Microsoft.HybridConnections.Core
         /// <returns></returns>
         public Task CloseAsync()
         {
-            _httpClient.Dispose();
+            if (_httpClient != null ) _httpClient.Dispose();
             return _listener.CloseAsync(CTS.Token);
         }
 
@@ -124,7 +175,7 @@ namespace Microsoft.HybridConnections.Core
         /// </summary>
         /// <param name="context"></param>
         /// <returns></returns>
-        public async Task<HttpResponseMessage> SendHttpRequestMessageAsync(RelayedHttpListenerContext context)
+        public async Task<HttpResponseMessage> SendHttpRequestMessageAsync(RelayedHttpListenerContext context, string connectionName)
         {
             var requestMessage = new HttpRequestMessage();
             if (context.Request.HasEntityBody)
@@ -138,7 +189,7 @@ namespace Microsoft.HybridConnections.Core
             }
 
             var relativePath = context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped);
-            relativePath = relativePath.Replace(_hybridConnectionSubPath, string.Empty, StringComparison.OrdinalIgnoreCase);
+            relativePath = relativePath.Replace($"/{connectionName}/", string.Empty, StringComparison.OrdinalIgnoreCase);
             requestMessage.RequestUri = new Uri(relativePath, UriKind.RelativeOrAbsolute);
             requestMessage.Method = new HttpMethod(context.Request.HttpMethod);
 
@@ -160,44 +211,7 @@ namespace Microsoft.HybridConnections.Core
             //var deserializedRequestMessage = RelayedHttpListenerRequestSerializer.Deserialize(requestMessageSer);
 
             // Send the request message via Http
-            return await _httpClient.SendAsync(requestMessage);
-        }
-
-
-        /// <summary>
-        /// Sends the response to the server
-        /// </summary>
-        /// <param name="context"></param>
-        /// <param name="responseMessage"></param>
-        /// <returns></returns>
-        public async Task SendResponseAsync(RelayedHttpListenerContext context, HttpResponseMessage responseMessage)
-        {
-            context.Response.StatusCode = responseMessage.StatusCode;
-            context.Response.StatusDescription = responseMessage.ReasonPhrase;
-            foreach (var header in responseMessage.Headers)
-            {
-                if (string.Equals(header.Key, "Transfer-Encoding"))
-                {
-                    continue;
-                }
-
-                context.Response.Headers.Add(header.Key, string.Join(",", header.Value));
-            }
-
-            var responseStream = await responseMessage.Content.ReadAsStreamAsync();
-            await responseStream.CopyToAsync(context.Response.OutputStream);
-        }
-
-        /// <summary>
-        /// Sends the error response
-        /// </summary>
-        /// <param name="ex"></param>
-        /// <param name="context"></param>
-        public void SendErrorResponse(Exception ex, RelayedHttpListenerContext context)
-        {
-            context.Response.StatusCode = HttpStatusCode.InternalServerError;
-            context.Response.StatusDescription = $"Http Listener: Internal Server Error: {ex.GetType().FullName}: {ex.Message}";
-            context.Response.Close();
+            return (_httpClient != null) ? await _httpClient.SendAsync(requestMessage) : null;
         }
     }
 }

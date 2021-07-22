@@ -2,7 +2,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.HybridConnections.Core;
 using System;
-using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -13,8 +12,6 @@ namespace Microsoft.HybridConnections.Relay
         public static HttpListener HttpRelayListener { get; set; }
 
         public static WebsocketClient WebsocketClient { get; set; }
-
-        private static bool IsHttpRelayMode;
 
         private static string ListenerNamespace;
         private static string ListenerConnectionName;
@@ -36,7 +33,7 @@ namespace Microsoft.HybridConnections.Relay
                 .AddEnvironmentVariables();
             var configuration = builder.Build();
 
-            IsHttpRelayMode = configuration["Listener:Mode"].Equals("http", StringComparison.CurrentCultureIgnoreCase);
+            Logger.IsVerboseLogs = bool.Parse(configuration["Log:Verbose"]);
 
             ListenerNamespace = $"{configuration["Listener:Namespace"]}.servicebus.windows.net";
             ListenerConnectionName = configuration["Listener:ConnectionName"];
@@ -66,27 +63,15 @@ namespace Microsoft.HybridConnections.Relay
             try
             {
                 // Create the Http hybrid proxy listener
-                if (IsHttpRelayMode)
-                {
-                    // Create Http bi-directional connection with the Http bound target
-                    HttpRelayListener = new HttpListener(
-                        ListenerNamespace,
-                        ListenerConnectionName,
-                        ListenerKeyName,
-                        ListenerPolicyName,
-                        ListenerTargetAddress,
-                        new CancellationTokenSource());
-                }
-                else
-                {
-                    // Create Http listener one-way connection
-                    HttpRelayListener = new HttpListener(
-                        ListenerNamespace,
-                        ListenerConnectionName,
-                        ListenerKeyName,
-                        ListenerPolicyName,
-                        new CancellationTokenSource());
-                }
+                // Create Http bi-directional connection with the Http bound target
+                HttpRelayListener = new HttpListener(
+                    ListenerNamespace,
+                    ListenerConnectionName,
+                    ListenerKeyName,
+                    ListenerPolicyName,
+                    "",
+                    HttpEventHandler,
+                    new CancellationTokenSource());
 
                 // Opening the listener establishes the control channel to
                 // the Azure Relay service. The control channel is continuously
@@ -118,58 +103,53 @@ namespace Microsoft.HybridConnections.Relay
 
             try
             {
-                if (IsHttpRelayMode)
+                // We'll use the Websocket client to send the content to a Websocket connection listener
+                // Create the Websocket client
+                WebsocketClient = new WebsocketClient(
+                    RelayNamespace,
+                    RelayConnectionName,
+                    RelayKeyName,
+                    RelayPolicyName);
+
+                // Initiate the connection
+                var relayConnection = await WebsocketClient.CreateConnectionAsync();
+                if (!relayConnection)
                 {
-                    // Send the request message to the target listener
-                    Console.WriteLine("Sending the request message to {0}...", ListenerTargetAddress);
-                    var responseMessage = await HttpRelayListener.SendHttpRequestMessageAsync(context);
-
-                    // Send the response status code back to the caller
-                    Console.WriteLine("Return the response's status code back to the caller...");
-                    await HttpRelayListener.SendResponseAsync(context, responseMessage);
+                    // There is no websocket listener that is actively listening to our connections, let's try again later
+                    return;
                 }
-                else
-                {
-                    // We'll use the Websocket client to send the content to a Websocket connection listener
-                    // Create the Websocket client
-                    WebsocketClient = new WebsocketClient(
-                        RelayNamespace,
-                        RelayConnectionName,
-                        RelayKeyName,
-                        RelayPolicyName);
 
-                    // Initiate the connection
-                    var relayConnection = await WebsocketClient.CreateConnectionAsync();
-                    if (!relayConnection)
-                    {
-                        // There is no websocket listener that is actively listening to our connections, let's try again later
-                        return;
-                    }
+                // Listen to messages on the websocket connection
+                var messageSent = await WebsocketClient.RelayAsync(context);
 
-                    // Listen to messages on the websocket connection
-                    await WebsocketClient.RelayAsync(context);
+                await Logger.OutputRequestAsync(messageSent);
 
-                    // Close Websocket connection
-                    await WebsocketClient.CloseConnectionAsync();
-                }
+                // Close Websocket connection
+                await WebsocketClient.CloseConnectionAsync();
             }
             catch (Exception ex)
             {
                 Logger.LogException(ex);
-                HttpRelayListener.SendErrorResponse(ex, context);
+                HttpListener.SendErrorResponse(ex, context);
             }
             finally
             {
-                Logger.LogRequest(startTimeUtc);
-                // Confirm the response has been sent
-                using (var sw = new StreamWriter(context.Response.OutputStream))
-                {
-                    sw.WriteLine("Response message has been sent");
-                }
-
+                Logger.LogPerformanceMetrics(startTimeUtc);
                 // The context MUST be closed here
                 await context.Response.CloseAsync();
             }
         }
+
+        /// <summary>
+        /// Outputs the Http listener's event messages
+        /// </summary>
+        /// <param name="eventMessage"></param>
+        static void HttpEventHandler(string eventMessage)
+        {
+            Logger.LogRequest("Http", ListenerTargetAddress, $"\u001b[36m {System.Net.HttpStatusCode.OK} \u001b[0m", eventMessage);
+            Console.WriteLine(eventMessage);
+        }
+
+
     }
 }

@@ -23,8 +23,9 @@ namespace Microsoft.HybridConnections.Core
         /// <param name="connectionName"></param>
         /// <param name="keyName"></param>
         /// <param name="key"></param>
+        /// <param name="eventHandler"></param>
         /// <param name="cts"></param>
-        public WebSocketListener(string relayNamespace, string connectionName, string keyName, string key, CancellationTokenSource cts)
+        public WebSocketListener(string relayNamespace, string connectionName, string keyName, string key, Action<string> eventHandler, CancellationTokenSource cts)
         {
             CTS = cts;
 
@@ -32,9 +33,9 @@ namespace Microsoft.HybridConnections.Core
             _listener = new HybridConnectionListener(new Uri($"sb://{relayNamespace}/{connectionName}"), tokenProvider);
 
             // Subscribe to the status events.
-            _listener.Connecting += (o, e) => { Console.WriteLine("Connecting"); };
-            _listener.Offline += (o, e) => { Console.WriteLine("Offline"); };
-            _listener.Online += (o, e) => { Console.WriteLine("Online"); };
+            _listener.Connecting += (o, e) => { eventHandler("connecting"); };
+            _listener.Offline += (o, e) => { eventHandler("offline"); };
+            _listener.Online += (o, e) => { eventHandler("online"); };
         }
 
         /// <summary>
@@ -46,8 +47,6 @@ namespace Microsoft.HybridConnections.Core
         public async Task OpenAsync()
         {
             await _listener.OpenAsync(CTS.Token);
-            Console.WriteLine($"Websocket Listener: Websocket Listener is listening on \n\r\t{_listener.Address}\n\r");
-            Console.WriteLine("Press [Enter] to exit");
 
             // trigger cancellation when the user presses enter. Not awaited.
 #pragma warning disable CS4014

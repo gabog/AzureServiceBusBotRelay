@@ -1,6 +1,8 @@
 ﻿using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
 using System;
+using System.Collections.Generic;
+using System.Globalization;
 using System.Net.Http;
 using System.Threading.Tasks;
 
@@ -8,25 +10,55 @@ namespace Microsoft.HybridConnections.Core
 {
     public static class Logger
     {
+        public static List<string> Logs { get; private set; } = new List<string>();
+        public static bool IsVerboseLogs { get; set; }
+        public static int MaxRows { get; set; }
+        public static int LeftPad { get; set; }
+        public static int MidPad { get; set; }
 
         /// <summary>
-        /// Logs the request's starting time
+        /// Log Request message
         /// </summary>
-        /// <param name="startTimeUtc"></param>
-        public static void LogRequest(DateTime startTimeUtc)
+        /// <param name="requestType"></param>
+        /// <param name="requestAddress"></param>
+        /// <param name="statusCode"></param>
+        /// <param name="message"></param>
+        public static void LogRequest(string requestType, string requestAddress, string statusCode, string message)
         {
-            var stopTimeUtc = DateTime.UtcNow;
-            //var buffer = new StringBuilder();
-            //buffer.Append($"{startTimeUtc.ToString("s", CultureInfo.InvariantCulture)}, ");
-            //buffer.Append($"\"{context.Request.HttpMethod} {context.Request.Url.GetComponents(UriComponents.PathAndQuery, UriFormat.Unescaped)}\", ");
-            //buffer.Append($"{(int)context.Response.StatusCode}, ");
-            //buffer.Append($"{(int)stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds}");
-            //Console.WriteLine(buffer);
+            var leftSection = $"{DateTime.UtcNow.ToString("s", CultureInfo.InvariantCulture)}: {requestType}   {requestAddress}";
+            var filler = string.Empty.PadRight((LeftPad - leftSection.Length > 0 ? LeftPad - leftSection.Length : 0) + MidPad);
 
-            Console.WriteLine("...and back {0:N0} ms...", stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds);
-            Console.WriteLine("");
+            Logs.Add($"{leftSection}{filler}{statusCode}  {message}");
+
+            if (Logs.Count >= MaxRows)
+            {
+                Logs.RemoveAt(0);
+            }
         }
 
+
+        /// <summary>
+        /// Log Request message
+        /// </summary>
+        /// <param name="requestType"></param>
+        /// <param name="requestAddress"></param>
+        /// <param name="statusCode"></param>
+        /// <param name="message"></param>
+        /// <param name="logsHandler"></param>
+        public static void LogRequest(string requestType, string requestAddress, string statusCode, string message, Action logsHandler)
+        {
+            LogRequest(requestType, requestAddress, statusCode, message);
+            logsHandler();
+        }
+
+
+        /// <summary>
+        /// Clear logs
+        /// </summary>
+        public static void ClearLogs()
+        {
+            Logs.Clear();
+        }
 
         /// <summary>
         /// Logs the request activity
@@ -34,7 +66,7 @@ namespace Microsoft.HybridConnections.Core
         /// <param name="requestMessage"></param>
         public static async Task<bool> LogRequestActivityAsync(HttpRequestMessage requestMessage)
         {
-            if (requestMessage.Content == null) return false;
+            if (requestMessage.Content == null || !IsVerboseLogs) return false;
 
             try
             {
@@ -78,18 +110,6 @@ namespace Microsoft.HybridConnections.Core
 
 
         /// <summary>
-        /// Logs the message
-        /// </summary>
-        /// <param name="ex"></param>
-        public static void LogMessage(string message)
-        {
-            Console.ForegroundColor = ConsoleColor.Blue;
-            Console.WriteLine(message);
-            Console.WriteLine("");
-            Console.ResetColor();
-        }
-
-        /// <summary>
         /// Validates the Json string
         /// </summary>
         /// <param name="strInput"></param>
@@ -113,5 +133,35 @@ namespace Microsoft.HybridConnections.Core
             }
         }
 
+        /// <summary>
+        /// OutputRequestAsync
+        /// </summary>
+        /// <param name="messageSent"></param>
+        /// <returns></returns>
+        public static async Task OutputRequestAsync(string messageSent)
+        {
+            if (!IsVerboseLogs) return;
+
+            var activityRequest = RelayedHttpListenerRequestSerializer.Deserialize(messageSent);
+            await LogRequestActivityAsync(activityRequest);
+        }
+
+        /// <summary>
+        /// Logs the request's starting time
+        /// </summary>
+        /// <param name="startTimeUtc"></param>
+        public static void LogPerformanceMetrics(DateTime startTimeUtc)
+        {
+            if (!IsVerboseLogs) return;
+
+            var stopTimeUtc = DateTime.UtcNow;
+
+            Logs.Add($"and back {stopTimeUtc.Subtract(startTimeUtc).TotalMilliseconds} ms...");
+
+            if (Logs.Count >= MaxRows)
+            {
+                Logs.RemoveAt(0);
+            }
+        }
     }
 }
