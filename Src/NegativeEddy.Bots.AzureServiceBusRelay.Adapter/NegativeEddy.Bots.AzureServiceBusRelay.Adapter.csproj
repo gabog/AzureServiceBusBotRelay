@@ -1,0 +1,25 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <PackageId>NegativeEddy.Bots.AzureServiceBusRelay.Adapter</PackageId>
+    <Description>Library for connecting bots with Azure Service Bus Relay</Description>
+    <Summary>Library for connecting bots with Azure Service Bus Relay</Summary>
+    <ContentTargetFolders>content</ContentTargetFolders>
+    <PackageTags>msbot-component;msbot-adapter</PackageTags>
+    <Version>1.0.0-preview4</Version>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <RootNamespace>NegativeEddy.Bots.AzureServiceBusRelay.Adapter</RootNamespace>
+    <AssemblyName>NegativeEddy.Bots.AzureServiceBusRelay.Adapter</AssemblyName>
+    <PackageProjectUrl>https://github.com/negativeeddy/AzureServiceBusBotRelay</PackageProjectUrl>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="**/*.schema" />
+    <Content Include="**/*.uischema" />
+    <None Include="exported/**/*.*" Pack="true" PackagePath="exported" />
+    <None Include="README.md" Condition="Exists('README.md')" Pack="true" PackagePath="" />
+    <PackageReference Include="Microsoft.Bot.Builder.Dialogs.Adaptive.Runtime" Version="4.14.1" />
+    <PackageReference Include="Microsoft.Bot.Builder.Integration.AspNet.Core" Version="4.14.1" />
+    <PackageReference Include="Microsoft.Azure.Relay" Version="2.0.15596" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,18 @@
+{
+    "$schema": "https://schemas.botframework.com/schemas/ui/v1.0/ui.schema",
+  "form": {
+    "label": "Azure Service Bus Relay connection",
+    "description": "Connects a bot to an Azure Service Bus Relay",
+    "helpLink": "https://github.com/negativeeddy/AzureServiceBusBotRelay",
+    "order": [
+      "Namespace",
+      "Relay",
+      "SASPolicy",
+      "SASKey",
+      "*"
+    ],
+        "hidden": [
+            "type"
+        ]
+  }
+}

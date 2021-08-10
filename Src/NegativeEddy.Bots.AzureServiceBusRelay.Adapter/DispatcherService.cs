@@ -1,6 +1,9 @@
-﻿using GaboG.ServiceBusRelayUtilNetCore.Extensions;
+﻿// Copyright (c) Microsoft. All rights reserved.
+// Licensed under the MIT license. See LICENSE file in the project root for full license information.
+
+using Microsoft.AspNetCore.Hosting.Server;
+using Microsoft.AspNetCore.Hosting.Server.Features;
 using Microsoft.Azure.Relay;
-using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using System;
@@ -10,11 +13,10 @@ using System.Net.Http.Headers;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
-using static GaboG.ServiceBusRelayUtilNetCore.Program;
 
-namespace GaboG.ServiceBusRelayUtilNetCore
+namespace NegativeEddy.Bots.AzureServiceBusRelay.Service
 {
-    internal class DispatcherService : IHostedService
+    public class DispatcherService : IHostedService
     {
         private HttpClient _httpClient;
         private string _hybridConnectionSubPath;
@@ -22,20 +24,59 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         private Uri _targetServiceAddress;
         private readonly RelayOptions _options;
         private readonly ILogger<DispatcherService> _logger;
+        private readonly IServer _server;
 
-        public DispatcherService(RelayOptions options, ILogger<DispatcherService> logger)
+        public DispatcherService(IServer server, RelayOptions options, ILogger<DispatcherService> logger)
         {
             _options = options;
             _logger = logger;
+            _server = server;
         }
 
         private async void ListenerRequestHandler(RelayedHttpListenerContext context)
         {
+            // generate the httpClient as late as possible because this hosted service may
+            // be started before the server's URI & port have been determined by the web host
+            if (_httpClient == null)
+            {
+                var addressFeature = _server.Features.Get<IServerAddressesFeature>();
+                foreach (var address in addressFeature.Addresses)
+                {
+                    _logger.LogInformation("Forwarding to bot at " + address);
+                    try
+                    {
+                        // check if this is the http URI
+                        Uri uri = new Uri(address);
+                        if (uri.Scheme == "http")
+                        {
+                            if (uri.Host == "0.0.0.0")
+                            {
+                                uri = new Uri($"http://localhost:{uri.Port}");
+                            }
+
+                            _options.TargetServiceAddress = address;
+                            _targetServiceAddress = uri;
+                            _httpClient = new HttpClient
+                            {
+                                BaseAddress = _targetServiceAddress
+                            };
+                            _httpClient.DefaultRequestHeaders.ExpectContinue = false;
+
+                            break;
+                        }
+                    }
+                    catch
+                    {
+                        // not a valid URI, skip it
+                    }
+                }
+            }
+
             var startTimeUtc = DateTime.UtcNow;
             HttpStatusCode responseStatus = 0;
             try
             {
-                
+
                 _logger.LogInformation("Received message");
                 var requestMessage = await CreateHttpRequestMessage(context);
                 _logger.LogInformation($"{requestMessage.Method} to {_targetServiceAddress}");
@@ -88,14 +129,6 @@ namespace GaboG.ServiceBusRelayUtilNetCore
             if (context.Request.HasEntityBody)
             {
                 requestMessage.Content = new StreamContent(context.Request.InputStream);
-                // Experiment to see if I can capture the return message instead of having the bot responding directly (so far it doesn't work).
-                //var contentStream = new MemoryStream();
-                //var writer = new StreamWriter(contentStream);
-                //var newActivity = requestMessage.Content.ReadAsStringAsync().Result.Replace("https://directline.botframework.com/", "https://localhost:44372/");
-                //writer.Write(newActivity);
-                //writer.Flush();
-                //contentStream.Position = 0;
-                //requestMessage.Content = new StreamContent(contentStream);
                 var contentType = context.Request.Headers[HttpRequestHeader.ContentType];
                 if (!string.IsNullOrEmpty(contentType))
                 {
@@ -151,30 +184,40 @@ namespace GaboG.ServiceBusRelayUtilNetCore
         => element.ValueKind == JsonValueKind.Undefined ? "" : JsonSerializer.Serialize(element, new JsonSerializerOptions { WriteIndented = indent });
 
         public async Task StartAsync(CancellationToken cancellationToken)
-        {           
-            _targetServiceAddress = new Uri(_options.TargetServiceAddress);
-
-            var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(_options.PolicyName, _options.PolicyKey);
-            _listener = new HybridConnectionListener(new Uri($"sb://{_options.RelayNamespace}/{_options.RelayName}"), tokenProvider);
-
-            _httpClient = new HttpClient
+        {
+            try
             {
-                BaseAddress = _targetServiceAddress
-            };
-            _httpClient.DefaultRequestHeaders.ExpectContinue = false;
+                var tokenProvider = TokenProvider.CreateSharedAccessSignatureTokenProvider(_options.PolicyName, _options.PolicyKey);
+                _listener = new HybridConnectionListener(new Uri($"sb://{_options.RelayNamespace}/{_options.RelayName}"), tokenProvider);
 
-            _hybridConnectionSubPath = _listener.Address.AbsolutePath.EnsureEndsWith("/");
+                _hybridConnectionSubPath = EnsureEndsWith(_listener.Address.AbsolutePath, "/");
 
-            _listener.RequestHandler = ListenerRequestHandler;
-            await _listener.OpenAsync(cancellationToken);
+                _listener.RequestHandler = ListenerRequestHandler;
+                await _listener.OpenAsync(cancellationToken);
 
-            _logger.LogInformation("Azure Service Bus is listening on {0}\nand routing requests to {1}", _listener.Address, _httpClient.BaseAddress);
+                _logger.LogInformation($"Listening to Azure Service Bus on {_listener.Address}");
+
+                string EnsureEndsWith(string s, string endValue)
+                {
+                    if (!string.IsNullOrEmpty(s) && s.EndsWith(endValue, StringComparison.Ordinal))
+                    {
+                        return s;
+                    }
+
+                    return s + endValue;
+                }
+            }
+            catch(Exception ex)
+            {
+                _logger.LogError(ex, "Failed to initialize Azure Service Bus Relay");
+                throw;
+            }
         }
 
         public async Task StopAsync(CancellationToken cancellationToken)
         {
-                _httpClient.Dispose();
-                await _listener.CloseAsync(cancellationToken);
+            _httpClient?.Dispose();
+            await _listener?.CloseAsync(cancellationToken);
         }
     }
 }
