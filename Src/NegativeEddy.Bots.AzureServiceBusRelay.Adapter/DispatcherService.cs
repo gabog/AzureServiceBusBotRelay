@@ -42,7 +42,6 @@ namespace NegativeEddy.Bots.AzureServiceBusRelay.Service
                 var addressFeature = _server.Features.Get<IServerAddressesFeature>();
                 foreach (var address in addressFeature.Addresses)
                 {
-                    _logger.LogInformation("Forwarding to bot at " + address);
                     try
                     {
                         // check if this is the http URI
@@ -54,6 +53,7 @@ namespace NegativeEddy.Bots.AzureServiceBusRelay.Service
                                 uri = new Uri($"http://localhost:{uri.Port}");
                             }
 
+                            _logger.LogInformation("Forwarding to bot at " + address);
                             _options.TargetServiceAddress = address;
                             _targetServiceAddress = uri;
                             _httpClient = new HttpClient
