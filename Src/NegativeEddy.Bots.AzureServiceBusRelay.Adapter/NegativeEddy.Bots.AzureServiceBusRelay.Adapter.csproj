@@ -12,6 +12,7 @@
     <RootNamespace>NegativeEddy.Bots.AzureServiceBusRelay.Adapter</RootNamespace>
     <AssemblyName>NegativeEddy.Bots.AzureServiceBusRelay.Adapter</AssemblyName>
     <PackageProjectUrl>https://github.com/negativeeddy/AzureServiceBusBotRelay</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/negativeeddy/AzureServiceBusBotRelay</RepositoryUrl>
   </PropertyGroup>
   <ItemGroup>
     <Content Include="**/*.schema" />
