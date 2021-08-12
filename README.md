@@ -60,7 +60,7 @@ Before testing the relay, your Azure Web App Bot's messaging endpoint must be up
 
 ### Connect to the relay from Bot Composer
 
-1. Add the AzureServiceBusRelay package to your bot
+1. Add the [NegativeEddy.Bots.AzureServiceBusRelay.Adapter]([https://www.nuget.org/packages/NegativeEddy.Bots.AzureServiceBusRelay.Adapter) package to your bot
 2. Enable the bot in the External Connections section and fill in the options from the values captured when you deployed the Azure Service Bus
 3. Restart your bot
 
