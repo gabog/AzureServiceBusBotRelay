@@ -1,0 +1,42 @@
+{
+  "$schema": "https://schemas.botframework.com/schemas/component/v1.0/component.schema",
+  "$role": "implements(Microsoft.IAdapter)",
+  "title": "Azure Service Bus Relay connection",
+  "description": "Connects a bot to an Azure Service Bus Relay.",
+  "type": "object",
+  "properties": {
+    "Namespace": {
+      "type": "string",
+      "title": "Namespace",
+      "description": "The name of the relay's namespace, e.g. '[Your Namespace].servicebus.windows.net'"
+    },
+    "Relay": {
+      "type": "string",
+      "title": "Relay name",
+      "description": "The name of the relay"
+    },
+    "SASPolicy": {
+      "type": "string",
+      "title": "SAS Policy name",
+      "description": "The name of the relay's Shared Access Policy"
+    },
+    "SASKey": {
+      "type": "string",
+      "title": "SAS Policy Key",
+      "description": "The Shared Access Policy's key",
+      "default": ""
+    },
+    "type": {
+      "type": "string",
+      "title": "type",
+      "description": "Adapter full type name.",
+      "default": "NegativeEddy.Bots.AzureServiceBusRelay.Adapter.AzureServiceBusRelayAdapter"
+    }
+  },
+  "required": [
+    "Namespace",
+    "Relay",
+    "SASPolicy",
+    "SASKey"
+  ]
+}
