@@ -7,7 +7,7 @@
     <Summary>Library for connecting bots with Azure Service Bus Relay</Summary>
     <ContentTargetFolders>content</ContentTargetFolders>
     <PackageTags>msbot-component;msbot-adapter</PackageTags>
-    <Version>1.0.0-preview4</Version>
+    <Version>1.0.0-preview1</Version>
     <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
     <RootNamespace>NegativeEddy.Bots.AzureServiceBusRelay.Adapter</RootNamespace>
     <AssemblyName>NegativeEddy.Bots.AzureServiceBusRelay.Adapter</AssemblyName>
