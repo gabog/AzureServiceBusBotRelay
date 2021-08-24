@@ -6,6 +6,7 @@
     <ApplicationIcon>App.ico</ApplicationIcon>
     <RootNamespace>NegativeEddy.Bots.AzureServiceBusRelay.CommandLine</RootNamespace>
     <UserSecretsId>57e4c1c9-b95f-4a5c-9dc2-57b1e6ccc769</UserSecretsId>
+    <AssemblyName>AzureServiceBusRelay</AssemblyName>
   </PropertyGroup>
 
   <ItemGroup>
