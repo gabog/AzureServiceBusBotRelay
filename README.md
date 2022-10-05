@@ -1,114 +1,69 @@
-# Overview
-A relay utility for bots based on Azure Service Bus.  
+# AzureServiceBusBotRelay
+
+## Overview
+
+A relay utility for bots based on [Azure Relay](https://docs.microsoft.com/en-us/azure/azure-relay/relay-what-is-it).  
 
 This utility allows you to forward a message sent to a bot hosted on any channel to your local machine.
 
-It is useful for debug scenarios or for more complex situations where the BotEmulator is not enough (i.e.: you use the WebChat control hosted on a site and you need to receive ChannelData in your requests).
+It is useful for debug scenarios or for more complex situations where the BotEmulator is not enough (i.e.: you use the WebChat control hosted on a site and you need to receive ChannelData in your requests or you are testing Teams specific events).
 
-## Acknowledgments 
-Part of this code is based on the work that [Pedro Felix](https://github.com/pmhsfelix) did in his project [here](https://github.com/pmhsfelix/WebApi.Explorations.ServiceBusRelayHost).
+It uses the Azure Relay service along with a small local service to recieve messages from the bot service and forward them to your locally hosted bot. This service can be hosted with the command line tool or installed into your Bot Composer bot as an Adapter package from Nuget.
 
-# How to configure and run the utility
-### Building with .Net Framework
+![architecture diagram](Docs/architecture.png)
 
-1. Once the solution has been cloned to your machine, open the solution in Visual Studio.
+### Acknowledgments
 
-2. In Solution Explorer, expand the **ServiceBusRelayUtil** folder.
+Part of this code is based on the work that [Pedro Felix](https://github.com/pmhsfelix/WebApi.Explorations.ServiceBusRelayHost) 
+and [Gabo Gilbert](https://github.com/gabog/AzureServiceBusBotRelay) have previously done
 
-3. Open the **App.config** file and replace the following values with those from your service bus (not the hybrid connection).
-   
-    a. "RelayNamespace" is the name of your service bus created earlier. Enter the value in place of **[Your Namespace]**.
-    
-    b. "RelayName" is the name of the shared access policy created in steps 9 through 11 during the service bus set up process. Enter the value in place of **[Your Relay Name]**.
-    
-    c. "PolicyName" is the value to the shared access policy created in steps 9 through 11 during the service bus set up process. Enter the value in place of **[Your Shared Access Policy Name]**.
-   
-    d. "PolicyKey" is the WCF relay to be used. Remember, this relay is programmatically created and only exists on your machine. Create a new, unused name and enter the value in place of **[Your Policy's Key]**.
-   
-    e. "TargetServiceAddress" sets the port to be used for localhost. The address and port number should match the address and port used by your bot. Enter a value in place of the "TODO" string part. For example, "http://localhost:[PORT]".
-   
-4. Before testing the relay, your Azure Web Bot's messaging endpoint must be updated to match the relay.
-   
-    a. Login to the Azure portal and open your Web App Bot.
-    
-    b. Select **Settings** under Bot management to open the settings blade.
-    
-    c. In the **Messaging endpoint** field, enter the service bus namespace and relay. The relay should match the relay name entered in the **App.config** file and should not exist in Azure.
-    
-    d. Append **"/api/messages"** to the end to create the full endpoint to be used. For example, “https://example-service-bus.servicebus.windows.net/wcf-example-relay/api/messages".
-    
-    e. Click **Save** when completed.
-   
-5. In Visual Studio, press **F5** to run the project.
-   
-6. Open and run your locally hosted bot.
-   
-7. Test your bot on a channel (Test in Web Chat, Skype, Teams, etc.). User data is captured and logged as activity occurs.
+## Setup
 
-    - When using the Bot Framework Emulator: The endpoint entered in Emulator must be the service bus endpoint saved in your Azure Web Bot **Settings** blade, under **Messaging Endpoint**.
+The relay can be used with traditional code based bots or as a simple add in component to Bot Composer
 
-8. Once testing is completed, you can compile the project into an executable.
+To setup the Azure Bot Service to connect to your local bot you need to
 
-    a. Right click the project folder in Visual Studio and select **Build**.
+1. Deploy an Azure Relay service
+2. Configure your Azure Bot Service to send messages to the Azure Relay 
+3. Connect to the relay from Bot Composer
 
-    b. The .exe will output to the **/bin/debug** folder, along with other necessary files, located in the project’s directory folder. All the files are necessary to run and should be included when moving the .exe to a new folder/location.
-    - The **app.config** is in the same folder and can be edited as credentials change without needing to recompile the project.
+* If you are using a code only bot and not using Bot Composer, once you set up the Azure Service Bus Relay, see the [command line instructions](Docs/Commandline.md) to connect it to your bot)
 
-### Building with .Net Core
+### Deploy an Azure Relay service
 
-1. Once the solution has been cloned to your machine, open the solution in Visual Studio.
+You can use this button to deploy an Azure Relay service with the correct configuration. You will just need to supply it with a unique name for the Azure Service Bus namespace.
 
-2. In Solution Explorer, expand the **ServiceBusRelayUtilNetCore** folder.
+After it completes, select the Outputs tab and copy the 5 values. You will need those to configure the bot relay tool and your bot service.
 
-3. Open the **appsettings.json** file and replace the following values with those from your service bus hybrid connection.
-   
-    a. "RelayNamespace" is the name of your service bus created earlier. Enter the value in place of **[Your Namespace]**.
+[![Deploy to Azure](https://aka.ms/deploytoazurebutton)](https://portal.azure.com/#create/Microsoft.Template/uri/https%3A%2F%2Fraw.githubusercontent.com%2Fnegativeeddy%2FAzureServiceBusBotRelay%2Fcommandline%2FDeployment%2Fdeploy.json)
 
-    b. "RelayName" is the name of the hybrid connection created in step 12. Enter the value in place of **[Your Relay Name]**.
+If you want to deploy the relay service manually you will need to
 
-    c. "PolicyName" is the name of the shared access policy created in steps 9 through 11 during the service bus set up process. Enter the value in place of **[Your Shared Access Policy Name]**.
+1. ensure the relay does not require authentication
+2. add a shared access policy to the hybrid relay that has permission to send & listen
 
-    d. "PolicyKey" is the value to the shared access policy created in steps 9 through 11 during the service bus set up process. Enter the value in place of **[Your Policy's Key]**.
-      
-    e. "TargetServiceAddress" sets the port to be used for localhost. The address and port number should match the address and port used by your bot. Enter a value in place of the **"http://localhost:[PORT]"**. For example, "http://localhost:3978".
-   
-4. Before testing the relay, your Azure Web App Bot's messaging endpoint must be updated to match the relay.
-   
-    a. Login to the Azure portal and open your Web App Bot.
-    
-    b. Select **Settings** under Bot management to open the settings blade.
-    
-    c. In the **Messaging endpoint** field, enter the service bus namespace and relay.
-    
-    d. Append **"/api/messages"** to the end to create the full endpoint to be used. For example, “https://example-service-bus.servicebus.windows.net/hc1/api/messages".
-    
-    e. Click **Save** when completed.
-   
-5. In Visual Studio, press **F5** to run the project.
-   
-6. Open and run your locally hosted bot.
-   
-7. Test your bot on a channel (Test in Web Chat, Skype, Teams, etc.). User data is captured and logged as activity occurs.
+### Configure your Azure Web App Bot or Azure Bot Registration
 
-    - When using the Bot Framework Emulator: The endpoint entered in Emulator must be the service bus endpoint saved in your Azure Web Bot **Settings** blade, under **Messaging Endpoint**.
+Before testing the relay, your Azure Web App Bot's messaging endpoint must be updated to match the relay.
 
-8. Once testing is completed, you can compile the project into an executable.
+1. Login to the Azure portal and open your Web App Bot or Bot Registration.
 
-    a. Right click the project folder in Visual Studio and select **Publish**.
+2. Select **Settings** under Bot management to open the settings blade.
 
-    b. For **Pick a publish Target**, select **Folder**.
+3. In the **Messaging endpoint** field, enter the service bus namespace and relay. This is the "messagingEndpoint" value from the output of the deployment step above.
 
-    c. For **Folder or File Share**, choose an output location or keep the default.
+    Ensure that the URI ends with "/api/messages"
 
-    d. Click **Create Profile** to create a publish profile.
+    For example, “https://example-service-bus.servicebus.windows.net/hc1/api/messages".
 
-    e. Click **Configure...** to change the build configuration and change the following:
+4. Click **Save** when completed. (You might have to click save twice)
 
-    - **Configuration** to "Debug | Any CPU"
-    - **Deployment Mode** to "Self-contained"
-    - **Target Runtime** to "win-x64"
+### Connect to the relay from Bot Composer
 
-    f. Click **Save** and then **Publish**
+1. Add the [NegativeEddy.Bots.AzureServiceBusRelay.Adapter]([https://www.nuget.org/packages/NegativeEddy.Bots.AzureServiceBusRelay.Adapter) package to your bot
+2. Enable the bot in the External Connections section and fill in the options from the values captured when you deployed the Azure Service Bus
+3. Restart your bot
 
-    g. The .exe will output to the **/bin/debug** folder, along with other necessary files, located in the project’s directory folder. All the files are necessary to run and should be included when moving the .exe to a new folder/location.
-    - The **appsettings.json** is in the same folder and can be edited as credentials change without needing to recompile the project.
+### Test your bot
+
+1. Test your bot on a channel (Test in Web Chat, Skype, Teams, etc.).
